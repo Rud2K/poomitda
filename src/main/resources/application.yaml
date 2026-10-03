@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: poomitda
+
+  jpa:
+    open-in-view: false
