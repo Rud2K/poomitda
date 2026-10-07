@@ -1,6 +1,7 @@
 package com.poomitda.global.exception;
 
 import com.poomitda.global.exception.exception.BusinessException;
+import com.poomitda.global.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;

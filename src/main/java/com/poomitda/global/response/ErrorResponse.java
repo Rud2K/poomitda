@@ -1,6 +1,7 @@
-package com.poomitda.global.exception;
+package com.poomitda.global.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.poomitda.global.exception.ErrorCode;
 import lombok.Getter;
 
 @Getter
