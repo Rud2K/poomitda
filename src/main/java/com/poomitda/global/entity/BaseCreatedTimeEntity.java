@@ -10,7 +10,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @EntityListeners(AuditingEntityListener.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public abstract class BaseCreatedEntity {
+public abstract class BaseCreatedTimeEntity {
 
   @CreatedDate
   @Column(name = "created_at", nullable = false, updatable = false)

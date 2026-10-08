@@ -8,7 +8,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 @MappedSuperclass
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public abstract class BaseTimeEntity extends BaseCreatedEntity {
+public abstract class BaseUpdatedTimeEntity extends BaseCreatedTimeEntity {
 
   @LastModifiedDate
   @Column(name = "updated_at", nullable = false)

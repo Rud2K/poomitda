@@ -50,7 +50,7 @@ class BaseTimeEntityTest {
   @Table(name = "test_auditing_entity")
   @Getter
   @NoArgsConstructor(access = AccessLevel.PROTECTED)
-  public static class TestEntity extends BaseTimeEntity {
+  public static class TestEntity extends BaseUpdatedTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
