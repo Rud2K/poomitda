@@ -8,7 +8,7 @@ public class BusinessException extends RuntimeException {
 
   private final ErrorCode errorCode;
 
-  // ErrorCode에 정의된 기본 메시지 사용
+  // 전달받은 오류 코드에 정의된 기본 메시지 사용
   public BusinessException(ErrorCode errorCode) {
     super(errorCode.getMessage());
     this.errorCode = errorCode;

@@ -65,11 +65,11 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(
       MethodArgumentNotValidException exception
   ) {
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+    CommonErrorCode commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 
   /**
@@ -96,18 +96,18 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleHandlerMethodValidationException(
       HandlerMethodValidationException exception
   ) {
-    ErrorCode errorCode;
+    CommonErrorCode commonErrorCode;
 
     if (exception.isForReturnValue()) {
       log.error("컨트롤러 반환값 검증 실패: {}", exception.getMethod().toGenericString());
-      errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
+      commonErrorCode = CommonErrorCode.INTERNAL_SERVER_ERROR;
     } else {
-      errorCode = ErrorCode.INVALID_INPUT_VALUE;
+      commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
     }
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 
   /**
@@ -130,11 +130,11 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(
       HttpMessageNotReadableException exception
   ) {
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+    CommonErrorCode commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 
   /**
@@ -156,11 +156,11 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatchException(
       MethodArgumentTypeMismatchException exception
   ) {
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+    CommonErrorCode commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 
   /**
@@ -182,11 +182,11 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleMissingServletRequestParameterException(
       MissingServletRequestParameterException exception
   ) {
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+    CommonErrorCode commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 
   /**
@@ -223,10 +223,10 @@ public class GlobalExceptionHandler {
 
     log.error("요청 처리 중 예상하지 못한 서버 오류가 발생했습니다.", exception);
 
-    ErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
+    CommonErrorCode commonErrorCode = CommonErrorCode.INTERNAL_SERVER_ERROR;
 
     return ResponseEntity
-        .status(errorCode.getHttpStatus())
-        .body(ErrorResponse.of(errorCode));
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
   }
 }

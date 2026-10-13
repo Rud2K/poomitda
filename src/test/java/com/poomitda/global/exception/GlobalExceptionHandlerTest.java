@@ -49,13 +49,13 @@ class GlobalExceptionHandlerTest {
 
     @GetMapping("/test/errors/business")
     public void business() {
-      throw new BusinessException(ErrorCode.FORBIDDEN);
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
     }
 
     @GetMapping("/test/errors/business-custom")
     public void businessCustom() {
       throw new BusinessException(
-          ErrorCode.FORBIDDEN,
+          CommonErrorCode.FORBIDDEN,
           "해당 공고를 수정할 권한이 없습니다."
       );
     }

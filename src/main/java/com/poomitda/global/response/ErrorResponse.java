@@ -1,7 +1,7 @@
 package com.poomitda.global.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.poomitda.global.exception.ErrorCode;
+import com.poomitda.global.exception.*;
 import lombok.Getter;
 
 @Getter
@@ -13,12 +13,12 @@ public final class ErrorResponse {
   private final Void data;
 
   private ErrorResponse(ErrorCode errorCode, String message) {
-    this.code = errorCode.name();
+    this.code = errorCode.getCode();
     this.message = message;
     this.data = null;
   }
 
-  // ErrorCode.java에 정의된 기본 메시지 사용
+  // 전달받은 오류 코드에 정의된 기본 메시지 사용
   public static ErrorResponse of(ErrorCode errorCode) {
     return new ErrorResponse(errorCode, errorCode.getMessage());
   }
