@@ -17,7 +17,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.auditing.*;
 import org.springframework.test.context.ActiveProfiles;
 
-@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
+@DataJpaTest(properties = {
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "spring.data.jpa.repositories.enabled=false"
+})
 @AutoConfigureTestDatabase(replace = Replace.ANY)
 @ActiveProfiles("test")
 @Import(JpaAuditingConfig.class)
