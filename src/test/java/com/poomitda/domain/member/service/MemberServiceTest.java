@@ -285,4 +285,82 @@ class MemberServiceTest {
 
     verify(passwordEncoder).encode(request.password());
   }
+
+  @Test
+  @DisplayName("이메일 사용 가능 -> 성공")
+  void checkEmailAvailableTest() {
+    // given
+    String email = "available@example";
+    when(memberRepository.existsByEmail(email)).thenReturn(false);
+
+    // when & then
+    assertDoesNotThrow(() -> memberService.checkEmail(email));
+
+    verify(memberRepository).existsByEmail(email);
+    verifyNoMoreInteractions(memberRepository);
+    verifyNoInteractions(passwordEncoder);
+  }
+
+  @Test
+  @DisplayName("이메일 중복 -> 이메일 중복 오류")
+  void checkEmailDuplicateTest() {
+    // given
+    String email = "duplicate@example.com";
+    when(memberRepository.existsByEmail(email)).thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.checkEmail(email)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.DUPLICATE_EMAIL,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).existsByEmail(email);
+    verifyNoMoreInteractions(memberRepository);
+    verifyNoInteractions(passwordEncoder);
+  }
+
+  @Test
+  @DisplayName("닉네임 사용 가능 -> 성공")
+  void checkNicknameAvailableTest() {
+    // given
+    String nickname = "available_nickname";
+    when(memberRepository.existsByNickname(nickname)).thenReturn(false);
+
+    // when & then
+    assertDoesNotThrow(() -> memberService.checkNickname(nickname));
+
+    verify(memberRepository).existsByNickname(nickname);
+    verifyNoMoreInteractions(memberRepository);
+    verifyNoInteractions(passwordEncoder);
+  }
+
+  @Test
+  @DisplayName("닉네임 중복 -> 닉네임 중복 오류")
+  void checkNicknameDuplicateTest() {
+    // given
+    String nickname = "duplicate_nickname";
+    when(memberRepository.existsByNickname(nickname)).thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.checkNickname(nickname)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.DUPLICATE_NICKNAME,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).existsByNickname(nickname);
+    verifyNoMoreInteractions(memberRepository);
+    verifyNoInteractions(passwordEncoder);
+  }
 }
