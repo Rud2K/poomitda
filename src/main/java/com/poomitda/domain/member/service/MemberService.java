@@ -75,4 +75,30 @@ public class MemberService {
         savedMember.getNickname()
     );
   }
+
+  /**
+   * 탈퇴 회원을 포함하여 이메일 중복 여부를 확인한다.
+   *
+   * @param email 형식 및 필수값 검증을 완료한 이메일
+   * @throws BusinessException 이메일이 중복된 경우
+   */
+  @Transactional(readOnly = true)
+  public void checkEmail(String email) {
+    if (memberRepository.existsByEmail(email)) {
+      throw new BusinessException(MemberErrorCode.DUPLICATE_EMAIL);
+    }
+  }
+
+  /**
+   * 탈퇴 회원을 포함하여 닉네임 중복 여부를 확인한다.
+   *
+   * @param nickname 필수값 및 길이 검증을 완료한 닉네임
+   * @throws BusinessException 닉네임이 중복된 경우
+   */
+  @Transactional(readOnly = true)
+  public void checkNickname(String nickname) {
+    if (memberRepository.existsByNickname(nickname)) {
+      throw new BusinessException(MemberErrorCode.DUPLICATE_NICKNAME);
+    }
+  }
 }
