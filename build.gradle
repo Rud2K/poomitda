@@ -28,6 +28,14 @@ dependencies {
     // Spring Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-gson:0.13.0'
+
+    // Metadata
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
     // Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
