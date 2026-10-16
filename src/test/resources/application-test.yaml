@@ -1,0 +1,6 @@
+jwt:
+  issuer: poomitda-test
+  # 테스트 전용 공개값. 실제 서버의 서명 키로 사용하지 않는다.
+  secret: "dGVzdC1vbmx5LWp3dC1rZXktMDEyMzQ1Njc4OWFiY2RlZg=="
+  access-token-expiration: 30m
+  refresh-token-expiration: 14d
