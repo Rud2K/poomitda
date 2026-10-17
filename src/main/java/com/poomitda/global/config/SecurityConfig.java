@@ -1,6 +1,7 @@
 package com.poomitda.global.config;
 
 import com.poomitda.global.security.handler.*;
+import com.poomitda.global.security.jwt.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.*;
 import org.springframework.http.HttpMethod;
@@ -8,6 +9,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @RequiredArgsConstructor
@@ -15,6 +17,7 @@ public class SecurityConfig {
 
   private final CustomAuthenticationEntryPoint authenticationEntryPoint;
   private final CustomAccessDeniedHandler accessDeniedHandler;
+  private final JwtTokenProvider jwtTokenProvider;
 
   /**
    * 헤더 기반 토큰 인증을 위한 보안 정책과 접근 규칙을 설정한다.
@@ -39,6 +42,15 @@ public class SecurityConfig {
         // 직접 구현할 JSON 로그인 API를 사용
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
+
+        // Access Token을 검증하고 인증 정보를 등록
+        .addFilterBefore(
+            new JwtAuthenticationFilter(
+                jwtTokenProvider,
+                authenticationEntryPoint
+            ),
+            UsernamePasswordAuthenticationFilter.class
+        )
 
         // 인증 실패 및 권한 부족 응답을 공통 오류 형식으로 반환
         .exceptionHandling(exception -> exception
