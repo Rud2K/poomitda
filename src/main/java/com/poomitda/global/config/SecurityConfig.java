@@ -66,6 +66,12 @@ public class SecurityConfig {
                 "/api/auth/login"
             ).permitAll()
 
+            // Access Token 없이 접근하고, Service에서 Refresh Token을 검증
+            .requestMatchers(
+                HttpMethod.POST,
+                "/api/auth/reissue"
+            ).permitAll()
+
             // 로그인 없이 접근할 수 있는 중복 확인 및 조회 API
             .requestMatchers(
                 HttpMethod.GET,

@@ -28,4 +28,18 @@ public class AuthController {
             )
         );
   }
+
+  @PostMapping("/reissue")
+  public ResponseEntity<SuccessResponse<AuthResponseDto.ReissueResponse>> reissue(
+      @RequestHeader(value = "Refresh-Token", required = false) String refreshToken
+  ) {
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(
+            SuccessResponse.of(
+                "토큰이 성공적으로 재발급되었습니다.",
+                authService.reissue(refreshToken)
+            )
+        );
+  }
 }

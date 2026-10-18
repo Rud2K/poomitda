@@ -13,4 +13,9 @@ public final class AuthResponseDto {
       String nickname,
       MemberRole role
   ) {}
+
+  public record ReissueResponse(
+      String accessToken,
+      String refreshToken
+  ) {}
 }
