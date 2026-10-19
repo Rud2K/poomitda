@@ -1,5 +1,6 @@
 package com.poomitda.global.config;
 
+import com.poomitda.domain.member.service.MemberAuthenticationService;
 import com.poomitda.global.security.handler.*;
 import com.poomitda.global.security.jwt.*;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ public class SecurityConfig {
   private final CustomAuthenticationEntryPoint authenticationEntryPoint;
   private final CustomAccessDeniedHandler accessDeniedHandler;
   private final JwtTokenProvider jwtTokenProvider;
+  private final MemberAuthenticationService memberAuthenticationService;
 
   /**
    * 헤더 기반 토큰 인증을 위한 보안 정책과 접근 규칙을 설정한다.
@@ -47,7 +49,8 @@ public class SecurityConfig {
         .addFilterBefore(
             new JwtAuthenticationFilter(
                 jwtTokenProvider,
-                authenticationEntryPoint
+                authenticationEntryPoint,
+                memberAuthenticationService
             ),
             UsernamePasswordAuthenticationFilter.class
         )

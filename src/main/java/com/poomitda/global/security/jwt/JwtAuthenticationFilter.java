@@ -1,6 +1,6 @@
 package com.poomitda.global.security.jwt;
 
-import com.poomitda.domain.member.entity.constant.MemberRole;
+import com.poomitda.domain.member.service.MemberAuthenticationService;
 import com.poomitda.global.security.handler.CustomAuthenticationEntryPoint;
 import com.poomitda.global.security.principal.MemberPrincipal;
 import io.jsonwebtoken.*;
@@ -20,6 +20,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   private final JwtTokenProvider jwtTokenProvider;
   private final CustomAuthenticationEntryPoint authenticationEntryPoint;
+  private final MemberAuthenticationService memberAuthenticationService;
 
   @Override
   protected void doFilterInternal(
@@ -39,14 +40,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       Claims claims = jwtTokenProvider.validateAccessToken(accessToken);
 
       Long memberId = Long.valueOf(claims.getSubject());
-      MemberRole role = MemberRole.valueOf(claims.get("role", String.class));
-
-      MemberPrincipal principal = new MemberPrincipal(memberId, role);
+      MemberPrincipal principal = memberAuthenticationService.authenticate(memberId);
 
       var authentication = UsernamePasswordAuthenticationToken.authenticated(
           principal,
           null,
-          List.of(new SimpleGrantedAuthority(role.name()))
+          List.of(new SimpleGrantedAuthority(principal.role().name()))
       );
 
       SecurityContext context = SecurityContextHolder.createEmptyContext();
