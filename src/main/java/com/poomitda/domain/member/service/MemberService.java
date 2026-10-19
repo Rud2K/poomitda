@@ -19,15 +19,7 @@ public class MemberService {
   private final PasswordEncoder passwordEncoder;
 
   /**
-   * <p>회원가입 정보를 바탕으로 회원을 생성하고 저장한다.</p>
-   *
-   * <p>탈퇴 회원을 포함하여 이메일과 닉네임의 중복 여부를 확인하고,
-   * 비밀번호를 해시 인코딩한 후 회원 데이터를 저장한다.</p>
-   *
-   * <p>저장 시 식별 가능한 이메일 또는 닉네임 UNIQUE 제약 위반은
-   * 해당 중복 오류로 변환하고, 그 외 데이터 무결성 예외는 그대로 전달한다.</p>
-   *
-   * <p>요청값의 필수 여부·형식·길이 검증은 호출 전에 완료되어야 한다.</p>
+   * 회원가입 정보를 바탕으로 회원을 생성하고 저장한다.
    *
    * @param request 회원가입 요청 정보
    * @return 저장된 회원의 ID, 이메일, 닉네임을 담은 {@link MemberResponseDto.SignupResponse}
