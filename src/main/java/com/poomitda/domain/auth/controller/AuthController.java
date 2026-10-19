@@ -3,9 +3,11 @@ package com.poomitda.domain.auth.controller;
 import com.poomitda.domain.auth.dto.*;
 import com.poomitda.domain.auth.service.AuthService;
 import com.poomitda.global.response.SuccessResponse;
+import com.poomitda.global.security.principal.MemberPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,6 +27,19 @@ public class AuthController {
             SuccessResponse.of(
                 "로그인에 성공했습니다.",
                 authService.login(request)
+            )
+        );
+  }
+
+  @PostMapping("/logout")
+  public ResponseEntity<SuccessResponse<Void>> logout(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal
+  ) {
+    authService.logout(memberPrincipal.memberId());
+    return ResponseEntity.ok()
+        .body(
+            SuccessResponse.of(
+                "성공적으로 로그아웃되었습니다."
             )
         );
   }

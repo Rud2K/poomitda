@@ -7,6 +7,7 @@ import com.poomitda.domain.auth.repository.RefreshTokenRepository;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.MemberStatus;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
 import com.poomitda.global.security.jwt.JwtTokenProvider;
 import com.poomitda.global.security.util.RefreshTokenHasher;
@@ -86,6 +87,29 @@ public class AuthService {
         member.getNickname(),
         member.getRole()
     );
+  }
+
+  /**
+   * 회원의 Refresh Token을 삭제하여 이후 토큰 재발급을 차단한다.
+   *
+   * @param memberId 인증된 회원의 ID
+   * @throws BusinessException 회원이 없거나 {@code MemberStatus.ACTIVE} 상태가 아닌 경우
+   */
+  @Transactional
+  public void logout(Long memberId) {
+    // 회원 정보 조회 및 회원 상태 확인
+    Member member = memberRepository.findByIdForUpdate(memberId)
+        .orElseThrow(
+            () -> new BusinessException(CommonErrorCode.UNAUTHORIZED)
+        );
+
+    if (member.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 저장된 Refresh Token이 있을 때만 삭제
+    refreshTokenRepository.findByMember_MemberId(member.getMemberId())
+        .ifPresent(refreshTokenRepository::delete);
   }
 
   /**
