@@ -11,6 +11,7 @@ import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.exception.BusinessException;
 import java.sql.SQLException;
+import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -362,5 +363,92 @@ class MemberServiceTest {
     verify(memberRepository).existsByNickname(nickname);
     verifyNoMoreInteractions(memberRepository);
     verifyNoInteractions(passwordEncoder);
+  }
+
+  @Test
+  @DisplayName("후기가 없는 회원 조회 -> 기본 정보와 null 평균 반환")
+  void getMyInfoWithoutReviewsTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = mock(Member.class);
+    when(member.getMemberId()).thenReturn(memberId);
+    when(member.getEmail()).thenReturn("member@example.com");
+    when(member.getNickname()).thenReturn("품잇다");
+    when(member.getPreferredRegion()).thenReturn(Region.BUSAN);
+    when(member.getPreferredSpecies()).thenReturn(Species.CAT);
+    when(member.getRole()).thenReturn(MemberRole.ROLE_USER);
+    when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+    when(member.getReviewCount()).thenReturn(0);
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.MyInfoResponse response = memberService.getMyInfo(memberId);
+
+    // then
+    assertAll(
+        () -> assertEquals(memberId, response.memberId()),
+        () -> assertEquals("member@example.com", response.email()),
+        () -> assertEquals("품잇다", response.nickname()),
+        () -> assertEquals(Region.BUSAN, response.preferredRegion()),
+        () -> assertEquals(Species.CAT, response.preferredSpecies()),
+        () -> assertEquals(MemberRole.ROLE_USER, response.role()),
+        () -> assertEquals(MemberStatus.ACTIVE, response.status()),
+        () -> assertNull(response.averageRating()),
+        () -> assertEquals(0, response.reviewCount())
+    );
+
+    verify(memberRepository).findById(memberId);
+  }
+
+  @Test
+  @DisplayName("평균 평점이 4.25인 회원 조회 -> 소수 첫째 자리 HALF_UP 반올림")
+  void getMyInfoAverageRatingHalfUpTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = mock(Member.class);
+    when(member.getRatingSum()).thenReturn(17L);
+    when(member.getReviewCount()).thenReturn(4);
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.MyInfoResponse response = memberService.getMyInfo(memberId);
+
+    // then
+    assertAll(
+        () -> assertEquals(Double.valueOf(4.3), response.averageRating()),
+        () -> assertEquals(4, response.reviewCount())
+    );
+
+    verify(memberRepository).findById(memberId);
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 회원 조회 -> 회원 없음 오류")
+  void getMyInfoMemberNotFoundTest() {
+    // given
+    Long memberId = 1L;
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.empty());
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.getMyInfo(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.MEMBER_NOT_FOUND,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).findById(memberId);
   }
 }
