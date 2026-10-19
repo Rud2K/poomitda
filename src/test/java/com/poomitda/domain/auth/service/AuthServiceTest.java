@@ -11,6 +11,7 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.exception.exception.BusinessException;
+import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.security.jwt.*;
 import com.poomitda.global.security.util.RefreshTokenHasher;
 import io.jsonwebtoken.*;
@@ -43,6 +44,96 @@ class AuthServiceTest {
 
   @InjectMocks
   private AuthService authService;
+
+  @Test
+  @DisplayName("로그아웃 -> 회원 잠금 후 저장된 Refresh Token 삭제")
+  void logoutDeletesStoredTokenTest() {
+    // given
+    Member member = mock(Member.class);
+
+    when(member.getMemberId()).thenReturn(1L);
+    when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+
+    RefreshToken storedToken = new RefreshToken(
+        member, "a".repeat(64), LocalDateTime.now(ZoneOffset.UTC).plusDays(1)
+    );
+
+    when(memberRepository.findByIdForUpdate(1L))
+        .thenReturn(Optional.of(member));
+    when(refreshTokenRepository.findByMember_MemberId(1L))
+        .thenReturn(Optional.of(storedToken));
+
+    // when
+    authService.logout(1L);
+
+    // then
+    InOrder order = inOrder(memberRepository, refreshTokenRepository);
+
+    order.verify(memberRepository).findByIdForUpdate(1L);
+    order.verify(refreshTokenRepository).findByMember_MemberId(1L);
+    order.verify(refreshTokenRepository).delete(storedToken);
+
+    verifyNoMoreInteractions(refreshTokenRepository);
+    verifyNoInteractions(passwordEncoder, jwtTokenProvider, refreshTokenHasher);
+  }
+
+  @Test
+  @DisplayName("저장된 Refresh Token 없음 -> 로그아웃 성공")
+  void logoutWithoutStoredTokenTest() {
+    // given
+    Member member = mock(Member.class);
+
+    when(member.getMemberId()).thenReturn(1L);
+    when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+    when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+    when(refreshTokenRepository.findByMember_MemberId(1L)).thenReturn(Optional.empty());
+
+    // when & then
+    assertDoesNotThrow(() -> authService.logout(1L));
+
+    verify(refreshTokenRepository).findByMember_MemberId(1L);
+    verifyNoMoreInteractions(refreshTokenRepository);
+    verifyNoInteractions(passwordEncoder, jwtTokenProvider, refreshTokenHasher);
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 회원 -> 로그아웃 거절")
+  void logoutMemberNotFoundTest() {
+    // given
+    when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class, () -> authService.logout(1L)
+    );
+
+    // then
+    assertEquals(CommonErrorCode.UNAUTHORIZED, exception.getErrorCode());
+    verifyNoInteractions(
+        refreshTokenRepository, passwordEncoder, jwtTokenProvider, refreshTokenHasher
+    );
+  }
+
+  @Test
+  @DisplayName("탈퇴 회원 -> 로그아웃 거절")
+  void logoutDeletedMemberTest() {
+    // given
+    Member member = mock(Member.class);
+
+    when(member.getStatus()).thenReturn(MemberStatus.DELETED);
+    when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class, () -> authService.logout(1L)
+    );
+
+    // then
+    assertEquals(CommonErrorCode.UNAUTHORIZED, exception.getErrorCode());
+    verifyNoInteractions(
+        refreshTokenRepository, passwordEncoder, jwtTokenProvider, refreshTokenHasher
+    );
+  }
 
   private Member createActiveMember() {
     Member member = mock(Member.class);
