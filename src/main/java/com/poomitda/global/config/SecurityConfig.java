@@ -26,12 +26,11 @@ public class SecurityConfig {
    *
    * @param http HTTP 보안 설정을 구성하는 빌더
    * @return 설정이 적용된 보안 필터 체인
-   * @throws Exception 보안 필터 체인 구성에 실패한 경우
    */
   @Bean
   public SecurityFilterChain securityFilterChain(
       HttpSecurity http
-  ) throws Exception {
+  ) {
     http
         // 인증 쿠키 없이 요청 헤더로 토큰을 전달하므로 CSRF 보호 비활성화
         .csrf(AbstractHttpConfigurer::disable)

@@ -9,6 +9,7 @@ import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,6 +23,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final CustomAuthenticationEntryPoint authenticationEntryPoint;
   private final MemberAuthenticationService memberAuthenticationService;
 
+  @NullMarked
   @Override
   protected void doFilterInternal(
       HttpServletRequest request,
