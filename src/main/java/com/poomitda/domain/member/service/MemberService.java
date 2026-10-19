@@ -5,6 +5,7 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.exception.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.exception.exception.BusinessException;
+import java.math.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -92,5 +93,50 @@ public class MemberService {
     if (memberRepository.existsByNickname(nickname)) {
       throw new BusinessException(MemberErrorCode.DUPLICATE_NICKNAME);
     }
+  }
+
+  /**
+   * 회원 ID로 현재 로그인한 회원의 정보를 조회한다.
+   *
+   * @param memberId 인증된 현재 회원의 ID
+   * @return 회원 기본 정보를 담은 {@link MemberResponseDto.MyInfoResponse}
+   * @throws BusinessException 해당 ID의 회원이 존재하지 않는 경우
+   */
+  @Transactional(readOnly = true)
+  public MemberResponseDto.MyInfoResponse getMyInfo(Long memberId) {
+    // memberId로 회원 조회
+    Member member = memberRepository.findById(memberId)
+        .orElseThrow(
+            () -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND)
+        );
+
+    // 회원의 평균 평점 계산
+    Double averageRating = null;
+
+    if (member.getReviewCount() > 0) {
+      averageRating = BigDecimal.valueOf(member.getRatingSum())
+          .divide(
+              BigDecimal.valueOf(member.getReviewCount()),
+              1,
+              RoundingMode.HALF_UP
+          )
+          .doubleValue();
+    }
+
+    // profileImageUrl은 profile_image_key로부터 생성 (AWS S3 인프라 구축 후 코드 작성)
+
+    // Member 정보를 Response DTO로 변환 후 반환
+    return new MemberResponseDto.MyInfoResponse(
+        member.getMemberId(),
+        member.getEmail(),
+        member.getNickname(),
+        null, // AWS S3 인프라 구축 후 수정 필요
+        member.getPreferredRegion(),
+        member.getPreferredSpecies(),
+        member.getRole(),
+        member.getStatus(),
+        averageRating,
+        member.getReviewCount()
+    );
   }
 }

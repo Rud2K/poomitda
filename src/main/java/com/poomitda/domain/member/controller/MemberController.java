@@ -5,8 +5,10 @@ import com.poomitda.domain.member.service.MemberService;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
 import com.poomitda.global.response.SuccessResponse;
+import com.poomitda.global.security.principal.MemberPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
@@ -57,5 +59,15 @@ public class MemberController {
 
     memberService.checkNickname(request.nickname());
     return SuccessResponse.of("사용 가능한 닉네임입니다.");
+  }
+
+  @GetMapping("/me")
+  public SuccessResponse<MemberResponseDto.MyInfoResponse> getMyInfo(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal
+  ) {
+    return SuccessResponse.of(
+        "요청이 성공적으로 처리되었습니다.",
+        memberService.getMyInfo(memberPrincipal.memberId())
+    );
   }
 }

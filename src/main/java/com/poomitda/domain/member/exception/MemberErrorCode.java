@@ -18,6 +18,12 @@ public enum MemberErrorCode implements ErrorCode {
   DUPLICATE_NICKNAME(
       HttpStatus.CONFLICT,
       "이미 존재하거나 사용 중인 닉네임입니다."
+  ),
+
+  // 주석 추가 예정
+  MEMBER_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "존재하지 않는 회원입니다."
   );
 
   private final HttpStatus httpStatus;
