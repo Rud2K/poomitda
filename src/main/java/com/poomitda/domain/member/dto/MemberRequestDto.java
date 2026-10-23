@@ -1,6 +1,7 @@
 package com.poomitda.domain.member.dto;
 
 import com.poomitda.global.constant.*;
+import com.poomitda.global.request.PatchField;
 import jakarta.validation.constraints.*;
 
 public final class MemberRequestDto {
@@ -35,5 +36,16 @@ public final class MemberRequestDto {
       @NotBlank(message = "닉네임은 필수 입력 항목입니다.")
       @Size(max = 50, message = "닉네임은 50자 이하여야 합니다.")
       String nickname
+  ) {}
+
+  public record UpdateMyInfoRequest(
+      PatchField<
+          @NotBlank(message = "닉네임은 null이거나 공백일 수 없습니다.")
+          @Size(max = 50, message = "닉네임은 50자 이하여야 합니다.")
+          String
+      > nickname,
+
+      PatchField<Region> preferredRegion,
+      PatchField<Species> preferredSpecies
   ) {}
 }
