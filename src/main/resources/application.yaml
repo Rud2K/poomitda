@@ -10,7 +10,3 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-expiration: 30m
   refresh-token-expiration: 14d
-
-app:
-  profile-image:
-    mode: disabled

@@ -10,7 +10,6 @@ import com.poomitda.domain.member.exception.MemberErrorCode;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.exception.BusinessException;
-import com.poomitda.global.storage.ProfileImageUrlProvider;
 import java.sql.SQLException;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
@@ -29,9 +28,6 @@ class MemberServiceTest {
 
   @Mock
   private PasswordEncoder passwordEncoder;
-
-  @Mock
-  private ProfileImageUrlProvider profileImageUrlProvider;
 
   @InjectMocks
   private MemberService memberService;
@@ -278,7 +274,6 @@ class MemberServiceTest {
         () -> assertEquals(MemberStatus.ACTIVE, memberToSave.getStatus()),
         () -> assertEquals(0L, memberToSave.getRatingSum()),
         () -> assertEquals(0, memberToSave.getReviewCount()),
-        () -> assertNull(memberToSave.getProfileImageKey()),
         () -> assertNull(memberToSave.getDeletedAt())
     );
 
@@ -454,30 +449,5 @@ class MemberServiceTest {
     );
 
     verify(memberRepository).findById(memberId);
-  }
-
-  @Test
-  @DisplayName("프로필 이미지 키가 있는 회원을 조회 -> 제공받은 이미지 URL 반환")
-  void getMyInfoWithProfileImageTest() {
-    // given
-    Long memberId = 1L;
-    String profileImageKey = "profiles/test-member.jpg";
-    String profileImageUrl = "https://images.example.com/profiles/test-member.jpg";
-
-    Member member = mock(Member.class);
-    when(member.getProfileImageKey()).thenReturn(profileImageKey);
-
-    when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
-
-    when(profileImageUrlProvider.getUrl(profileImageKey)).thenReturn(profileImageUrl);
-
-    // when
-    MemberResponseDto.MyInfoResponse response = memberService.getMyInfo(memberId);
-
-    // then
-    assertEquals(profileImageUrl, response.profileImageUrl());
-
-    verify(memberRepository).findById(memberId);
-    verify(profileImageUrlProvider).getUrl(profileImageKey);
   }
 }

@@ -17,7 +17,6 @@ public final class MemberResponseDto {
       Long memberId,
       String email,
       String nickname,
-      String profileImageUrl,
       Region preferredRegion,
       Species preferredSpecies,
       MemberRole role,

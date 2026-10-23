@@ -40,9 +40,6 @@ public class Member extends BaseDeletedTimeEntity {
   @Column(name = "nickname", length = 50, nullable = false)
   private String nickname;          // 닉네임
 
-  @Column(name = "profile_image_key", length = 1024)
-  private String profileImageKey;   // 이미지파일 식별 Key
-
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "preferred_region", length = 20)
@@ -79,7 +76,6 @@ public class Member extends BaseDeletedTimeEntity {
     this.email = email;
     this.password = encodedPassword;
     this.nickname = nickname;
-    this.profileImageKey = null;
     this.preferredRegion = preferredRegion;
     this.preferredSpecies = preferredSpecies;
     this.role = MemberRole.ROLE_USER;

@@ -5,7 +5,6 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.exception.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.exception.exception.BusinessException;
-import com.poomitda.global.storage.ProfileImageUrlProvider;
 import java.math.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,7 +18,6 @@ public class MemberService {
 
   private final MemberRepository memberRepository;
   private final PasswordEncoder passwordEncoder;
-  private final ProfileImageUrlProvider profileImageUrlProvider;
 
   /**
    * 회원가입 정보를 바탕으로 회원을 생성하고 저장한다.
@@ -125,15 +123,11 @@ public class MemberService {
           .doubleValue();
     }
 
-    // 회원의 이미지 저장 키에 대한 조회 URL 확인
-    String profileImageUrl = profileImageUrlProvider.getUrl(member.getProfileImageKey());
-
     // Member 정보를 Response DTO로 변환 후 반환
     return new MemberResponseDto.MyInfoResponse(
         member.getMemberId(),
         member.getEmail(),
         member.getNickname(),
-        profileImageUrl,
         member.getPreferredRegion(),
         member.getPreferredSpecies(),
         member.getRole(),
