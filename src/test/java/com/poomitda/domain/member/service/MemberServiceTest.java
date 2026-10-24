@@ -10,6 +10,7 @@ import com.poomitda.domain.member.exception.MemberErrorCode;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.exception.BusinessException;
+import com.poomitda.global.request.PatchField;
 import java.sql.SQLException;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
@@ -19,6 +20,7 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
@@ -449,5 +451,316 @@ class MemberServiceTest {
     );
 
     verify(memberRepository).findById(memberId);
+  }
+
+  @Test
+  @DisplayName("닉네임만 수정 -> 닉네임 변경 및 선호 정보 유지")
+  void updateMyInfoNicknameOnlyTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.supplied("새닉네임"),
+            PatchField.absent(),
+            PatchField.absent()
+        );
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+    when(memberRepository.existsByNickname("새닉네임"))
+        .thenReturn(false);
+
+    // when
+    MemberResponseDto.UpdateMyInfoResponse response =
+        memberService.updateMyInfo(memberId, request);
+
+    // then
+    assertAll(
+        () -> assertEquals("새닉네임", member.getNickname()),
+        () -> assertEquals(Region.SEOUL, member.getPreferredRegion()),
+        () -> assertEquals(Species.DOG, member.getPreferredSpecies()),
+        () -> assertEquals(memberId, response.memberId()),
+        () -> assertEquals("새닉네임", response.nickname()),
+        () -> assertEquals(Region.SEOUL, response.preferredRegion()),
+        () -> assertEquals(Species.DOG, response.preferredSpecies())
+    );
+
+    verify(memberRepository).existsByNickname("새닉네임");
+    verify(memberRepository).flush();
+  }
+
+  @Test
+  @DisplayName("선호 정보에 null 전달 -> 설정 해제 및 닉네임 유지")
+  void updateMyInfoClearPreferencesTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.absent(),
+            PatchField.supplied(null),
+            PatchField.supplied(null)
+        );
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.UpdateMyInfoResponse response =
+        memberService.updateMyInfo(memberId, request);
+
+    // then
+    assertAll(
+        () -> assertEquals("기존닉네임", member.getNickname()),
+        () -> assertNull(member.getPreferredRegion()),
+        () -> assertNull(member.getPreferredSpecies()),
+        () -> assertEquals(memberId, response.memberId()),
+        () -> assertEquals("기존닉네임", response.nickname()),
+        () -> assertNull(response.preferredRegion()),
+        () -> assertNull(response.preferredSpecies())
+    );
+
+    verify(memberRepository, never()).existsByNickname(anyString());
+    verify(memberRepository).flush();
+  }
+
+  @Test
+  @DisplayName("현재 닉네임과 같은 값 전달 -> 중복 검사 생략 및 다른 필드 수정")
+  void updateMyInfoSameNicknameTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.supplied("기존닉네임"),
+            PatchField.supplied(Region.GYEONGGI),
+            PatchField.absent()
+        );
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.UpdateMyInfoResponse response =
+        memberService.updateMyInfo(memberId, request);
+
+    // then
+    assertAll(
+        () -> assertEquals("기존닉네임", member.getNickname()),
+        () -> assertEquals(Region.GYEONGGI, member.getPreferredRegion()),
+        () -> assertEquals(Species.DOG, member.getPreferredSpecies()),
+        () -> assertEquals(memberId, response.memberId()),
+        () -> assertEquals("기존닉네임", response.nickname()),
+        () -> assertEquals(Region.GYEONGGI, response.preferredRegion()),
+        () -> assertEquals(Species.DOG, response.preferredSpecies())
+    );
+
+    verify(memberRepository, never()).existsByNickname(anyString());
+    verify(memberRepository).flush();
+  }
+
+  @Test
+  @DisplayName("중복 닉네임 전달 -> 중복 오류 및 변경 중단")
+  void updateMyInfoDuplicateNicknameTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.supplied("사용중인닉네임"),
+            PatchField.supplied(Region.GYEONGGI),
+            PatchField.supplied(Species.CAT)
+        );
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+    when(memberRepository.existsByNickname("사용중인닉네임"))
+        .thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.updateMyInfo(memberId, request)
+    );
+
+    // then
+    assertAll(
+        () -> assertEquals(
+            MemberErrorCode.DUPLICATE_NICKNAME,
+            exception.getErrorCode()
+        ),
+        () -> assertEquals("기존닉네임", member.getNickname()),
+        () -> assertEquals(Region.SEOUL, member.getPreferredRegion()),
+        () -> assertEquals(Species.DOG, member.getPreferredSpecies())
+    );
+
+    verify(memberRepository).existsByNickname("사용중인닉네임");
+    verify(memberRepository, never()).flush();
+  }
+
+  @Test
+  @DisplayName("수정 대상 회원 없음 -> 회원 없음 오류")
+  void updateMyInfoMemberNotFoundTest() {
+    // given
+    Long memberId = 1L;
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.supplied("새닉네임"),
+            PatchField.absent(),
+            PatchField.absent()
+        );
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.empty());
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.updateMyInfo(memberId, request)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.MEMBER_NOT_FOUND,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).findById(memberId);
+    verifyNoMoreInteractions(memberRepository);
+  }
+
+  @Test
+  @DisplayName("변경사항 반영 중 닉네임 중복 -> 닉네임 중복 오류로 변환")
+  void updateMyInfoNicknameConstraintViolationTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.supplied("새닉네임"),
+            PatchField.absent(),
+            PatchField.absent()
+        );
+
+    ConstraintViolationException cause =
+        new ConstraintViolationException(
+            "테스트용 닉네임 UNIQUE 제약 위반",
+            new SQLException("테스트용 중복 변경 오류"),
+            "members.uk_members_nickname"
+        );
+
+    DataIntegrityViolationException flushException =
+        new DataIntegrityViolationException("회원 정보 변경 실패", cause);
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+    when(memberRepository.existsByNickname("새닉네임"))
+        .thenReturn(false);
+
+    doThrow(flushException).when(memberRepository).flush();
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.updateMyInfo(memberId, request)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.DUPLICATE_NICKNAME,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).existsByNickname("새닉네임");
+    verify(memberRepository).flush();
+  }
+
+  @Test
+  @DisplayName("변경사항 반영 중 알 수 없는 제약 위반 -> 기존 예외 전달")
+  void updateMyInfoUnknownConstraintViolationTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "기존닉네임",
+        Region.SEOUL,
+        Species.DOG
+    );
+
+    MemberRequestDto.UpdateMyInfoRequest request =
+        new MemberRequestDto.UpdateMyInfoRequest(
+            PatchField.absent(),
+            PatchField.supplied(Region.GYEONGGI),
+            PatchField.absent()
+        );
+
+    ConstraintViolationException cause =
+        new ConstraintViolationException(
+            "테스트용 미분류 제약 위반",
+            new SQLException("테스트용 변경 오류"),
+            "members.unknown_constraint"
+        );
+
+    DataIntegrityViolationException flushException =
+        new DataIntegrityViolationException("회원 정보 변경 실패", cause);
+
+    when(memberRepository.findById(memberId))
+        .thenReturn(Optional.of(member));
+
+    doThrow(flushException).when(memberRepository).flush();
+
+    // when
+    DataIntegrityViolationException exception = assertThrows(
+        DataIntegrityViolationException.class,
+        () -> memberService.updateMyInfo(memberId, request)
+    );
+
+    // then
+    assertSame(flushException, exception);
+
+    verify(memberRepository, never()).existsByNickname(anyString());
+    verify(memberRepository).flush();
   }
 }
