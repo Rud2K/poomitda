@@ -136,4 +136,67 @@ public class MemberService {
         member.getReviewCount()
     );
   }
+
+  /**
+   * 회원 ID로 현재 로그인한 회원의 정보를 부분 수정한다.
+   *
+   * @param memberId 인증된 현재 회원의 ID
+   * @param request 입력 검증을 완료한 회원 정보 수정 요청
+   * @return 수정된 회원 정보를 담은 {@link MemberResponseDto.UpdateMyInfoResponse}
+   * @throws BusinessException 회원이 존재하지 않거나 닉네임이 중복된 경우
+   * @throws DataIntegrityViolationException 닉네임 중복으로 분류할 수 없는 데이터 무결성 위반이 발생한 경우
+   */
+  @Transactional
+  public MemberResponseDto.UpdateMyInfoResponse updateMyInfo(
+      Long memberId,
+      MemberRequestDto.UpdateMyInfoRequest request
+  ) {
+    // memberId로 회원 조회
+    Member member = memberRepository.findById(memberId)
+        .orElseThrow(
+            () -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND)
+        );
+
+    // 닉네임이 전달된 경우
+    if (request.nickname().present()) {
+      String newNickname = request.nickname().value();
+
+      // 전달된 값이 현재 닉네임과 다른 경우
+      if (!member.getNickname().equals(newNickname)) {
+
+        // 닉네임 중복이면 DUPLICATE_NICKNAME 예외
+        if (memberRepository.existsByNickname(newNickname)) {
+          throw new BusinessException(MemberErrorCode.DUPLICATE_NICKNAME);
+        }
+
+        // 닉네임 중복이 아니면 변경
+        member.changeNickname(newNickname);
+      }
+    }
+
+    // 선호 지역이 전달된 경우 변경
+    if (request.preferredRegion().present()) {
+      member.changePreferredRegion(request.preferredRegion().value());
+    }
+
+    // 선호 동물이 전달된 경우 변경
+    if (request.preferredSpecies().present()) {
+      member.changePreferredSpecies(request.preferredSpecies().value());
+    }
+
+    // 변경사항을 DB에 반영하고 닉네임 UNIQUE 제약 위반 처리
+    try {
+      memberRepository.flush();
+    } catch (DataIntegrityViolationException e) {
+      throw MemberExceptionTranslator.translateUpdateMyInfoException(e);
+    }
+
+    // 변경된 회원 정보로 응답 생성 후 반환
+    return new MemberResponseDto.UpdateMyInfoResponse(
+        member.getMemberId(),
+        member.getNickname(),
+        member.getPreferredRegion(),
+        member.getPreferredSpecies()
+    );
+  }
 }

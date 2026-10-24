@@ -70,4 +70,15 @@ public class MemberController {
         memberService.getMyInfo(memberPrincipal.memberId())
     );
   }
+
+  @PatchMapping("/me")
+  public SuccessResponse<MemberResponseDto.UpdateMyInfoResponse> updateMyInfo(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @Valid @RequestBody MemberRequestDto.UpdateMyInfoRequest request
+  ) {
+    return SuccessResponse.of(
+        "회원 정보가 수정되었습니다.",
+        memberService.updateMyInfo(memberPrincipal.memberId(), request)
+    );
+  }
 }

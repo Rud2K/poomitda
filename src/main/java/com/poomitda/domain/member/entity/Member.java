@@ -83,4 +83,16 @@ public class Member extends BaseDeletedTimeEntity {
     this.ratingSum = 0L;
     this.reviewCount = 0;
   }
+
+  public void changeNickname(String nickname) {
+    this.nickname = nickname;
+  }
+
+  public void changePreferredRegion(Region preferredRegion) {
+    this.preferredRegion = preferredRegion;
+  }
+
+  public void changePreferredSpecies(Species preferredSpecies) {
+    this.preferredSpecies = preferredSpecies;
+  }
 }

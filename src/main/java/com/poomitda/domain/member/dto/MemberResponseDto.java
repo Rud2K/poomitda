@@ -24,4 +24,11 @@ public final class MemberResponseDto {
       Double averageRating,
       int reviewCount
   ) {}
+
+  public record UpdateMyInfoResponse(
+      Long memberId,
+      String nickname,
+      Region preferredRegion,
+      Species preferredSpecies
+  ) {}
 }
