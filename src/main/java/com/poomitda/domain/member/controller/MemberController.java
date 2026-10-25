@@ -81,4 +81,14 @@ public class MemberController {
         memberService.updateMyInfo(memberPrincipal.memberId(), request)
     );
   }
+
+  @GetMapping("/{memberId}")
+  public SuccessResponse<MemberResponseDto.PublicProfileResponse> getPublicProfile(
+      @PathVariable("memberId") Long memberId
+  ) {
+    return SuccessResponse.of(
+        "회원 프로필 조회 성공",
+        memberService.getPublicProfile(memberId)
+    );
+  }
 }

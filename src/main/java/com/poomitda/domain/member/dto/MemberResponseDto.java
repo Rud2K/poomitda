@@ -31,4 +31,13 @@ public final class MemberResponseDto {
       Region preferredRegion,
       Species preferredSpecies
   ) {}
+
+  public record PublicProfileResponse (
+      Long memberId,
+      String nickname,
+      MemberRole role,
+      long postCount,
+      Double averageRating,
+      int reviewCount
+  ) {}
 }

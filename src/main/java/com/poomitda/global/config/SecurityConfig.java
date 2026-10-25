@@ -74,12 +74,18 @@ public class SecurityConfig {
                 "/api/auth/reissue"
             ).permitAll()
 
+            // /me가 공개되지 않도록 인증 규칙을 먼저 적용
+            .requestMatchers(
+                HttpMethod.GET,
+                "/api/members/me"
+            ).authenticated()
+
             // 로그인 없이 접근할 수 있는 중복 확인 및 조회 API
             .requestMatchers(
                 HttpMethod.GET,
                 "/api/members/check-email",
                 "/api/members/check-nickname",
-                "/api/members/{memberId:[0-9]+}",
+                "/api/members/{memberId}",
                 "/api/posts"
             ).permitAll()
 

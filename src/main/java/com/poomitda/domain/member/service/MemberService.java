@@ -2,6 +2,7 @@ package com.poomitda.domain.member.service;
 
 import com.poomitda.domain.member.dto.*;
 import com.poomitda.domain.member.entity.Member;
+import com.poomitda.domain.member.entity.constant.MemberStatus;
 import com.poomitda.domain.member.exception.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.global.exception.exception.BusinessException;
@@ -197,6 +198,52 @@ public class MemberService {
         member.getNickname(),
         member.getPreferredRegion(),
         member.getPreferredSpecies()
+    );
+  }
+
+  /**
+   * 회원 ID로 공개 프로필을 조회한다.
+   *
+   * @param memberId 조회 대상 회원 ID
+   * @return 공개 가능한 회원 정보와 평점 정보를 담은 {@link MemberResponseDto.PublicProfileResponse}
+   * @throws BusinessException 회원이 존재하지 않거나 탈퇴한 경우
+   */
+  @Transactional(readOnly = true)
+  public MemberResponseDto.PublicProfileResponse getPublicProfile(
+      Long memberId
+  ) {
+    // 회원 조회 (존재하지 않거나 탈퇴한 회원이면 예외 발생)
+    Member member = memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    ).orElseThrow(
+        () -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND)
+    );
+
+    // 해당 회원이 작성한 유효 공고 수 조회
+    // TODO: 공고 도메인 연결 후 작성 필요
+
+    // 회원의 평점 합계와 후기 수로 평균 평점 계산 (후기가 없으면 null)
+    Double averageRating = null;
+
+    if (member.getReviewCount() > 0) {
+      averageRating = BigDecimal.valueOf(member.getRatingSum())
+          .divide(
+              BigDecimal.valueOf(member.getReviewCount()),
+              1,
+              RoundingMode.HALF_UP
+          )
+          .doubleValue();
+    }
+
+    // 공개할 필드만 DTO에 담아 반환
+    return new MemberResponseDto.PublicProfileResponse(
+        member.getMemberId(),
+        member.getNickname(),
+        member.getRole(),
+        0L, // TODO: 공고 도메인 연결 후 수정 필요
+        averageRating,
+        member.getReviewCount()
     );
   }
 }

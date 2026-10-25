@@ -1,6 +1,7 @@
 package com.poomitda.domain.member.repository;
 
 import com.poomitda.domain.member.entity.Member;
+import com.poomitda.domain.member.entity.constant.MemberStatus;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.*;
@@ -43,4 +44,13 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT m FROM Member m WHERE m.memberId = :memberId")
   Optional<Member> findByIdForUpdate(@Param("memberId") Long memberId);
+
+  /**
+   * 회원 ID와 제외할 상태를 기준으로 회원을 조회한다.
+   *
+   * @param memberId 조회할 회원 ID
+   * @param status 조회에서 제외할 회원 상태
+   * @return 조건에 맞는 회원, 없으면 빈 {@link Optional}
+   */
+  Optional<Member> findByMemberIdAndStatusNot(Long memberId, MemberStatus status);
 }
