@@ -763,4 +763,95 @@ class MemberServiceTest {
     verify(memberRepository, never()).existsByNickname(anyString());
     verify(memberRepository).flush();
   }
+
+  @Test
+  @DisplayName("후기가 없는 공개 프로필 조회 -> 기본 정보와 null 평균 반환")
+  void getPublicProfileWithoutReviewsTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    when(memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    )).thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.PublicProfileResponse response = memberService.getPublicProfile(memberId);
+
+    // then
+    assertAll(
+        () -> assertEquals(memberId, response.memberId()),
+        () -> assertEquals("품잇다", response.nickname()),
+        () -> assertEquals(MemberRole.ROLE_USER, response.role()),
+        () -> assertNull(response.averageRating()),
+        () -> assertEquals(0, response.reviewCount())
+    );
+
+    verify(memberRepository).findByMemberIdAndStatusNot(memberId, MemberStatus.DELETED);
+  }
+
+  @Test
+  @DisplayName("공개 프로필 평균 평점 4.25 -> 소수 첫째 자리에서 4.3 반환")
+  void getPublicProfileAverageRatingHalfUpTest() {
+    // given
+    Long memberId = 1L;
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+    ReflectionTestUtils.setField(member, "ratingSum", 17L);
+    ReflectionTestUtils.setField(member, "reviewCount", 4);
+
+    when(memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    )).thenReturn(Optional.of(member));
+
+    // when
+    MemberResponseDto.PublicProfileResponse response = memberService.getPublicProfile(memberId);
+
+    // then
+    assertAll(
+        () -> assertEquals(Double.valueOf(4.3), response.averageRating()),
+        () -> assertEquals(4, response.reviewCount())
+    );
+  }
+
+  @Test
+  @DisplayName("공개 프로필 조회 결과 없음 -> 회원 없음 오류")
+  void getPublicProfileMemberNotFoundTest() {
+    // given
+    Long memberId = 1L;
+
+    when(memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    )).thenReturn(Optional.empty());
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.getPublicProfile(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.MEMBER_NOT_FOUND,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).findByMemberIdAndStatusNot(memberId, MemberStatus.DELETED);
+  }
 }
