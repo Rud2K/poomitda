@@ -48,3 +48,6 @@ logs/
 ### OS Files ###
 .DS_Store
 Thumbs.db
+
+### Local ERD ###
+/Poomitda_ERD.png
