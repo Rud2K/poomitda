@@ -31,4 +31,15 @@ public class S3ImageStorage {
 
     s3Client.deleteObject(request);
   }
+
+  public String getImageUrl(String imageKey) {
+    GetUrlRequest request = GetUrlRequest.builder()
+        .bucket(properties.bucket())
+        .key(imageKey)
+        .build();
+
+    return s3Client.utilities()
+        .getUrl(request)
+        .toExternalForm();
+  }
 }
