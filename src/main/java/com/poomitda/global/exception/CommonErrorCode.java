@@ -25,6 +25,12 @@ public enum CommonErrorCode implements ErrorCode {
       "해당 요청을 수행할 권한이 없습니다."
   ),
 
+  // 요청 본문 또는 업로드 파일이 허용된 크기를 초과한 경우
+  PAYLOAD_TOO_LARGE(
+      HttpStatus.CONTENT_TOO_LARGE,
+      "허용된 요청 크기를 초과했습니다."
+  ),
+
   // 예상하지 못한 서버 내부 오류가 발생한 경우
   INTERNAL_SERVER_ERROR(
       HttpStatus.INTERNAL_SERVER_ERROR,
