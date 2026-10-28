@@ -5,6 +5,15 @@ spring:
   jpa:
     open-in-view: false
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+server:
+  tomcat:
+    max-swallow-size: 8MB
+
 jwt:
   issuer: poomitda
   secret: ${JWT_SECRET}

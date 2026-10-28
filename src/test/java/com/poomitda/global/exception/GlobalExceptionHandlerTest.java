@@ -21,6 +21,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.*;
+import org.springframework.web.multipart.*;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.server.ResponseStatusException;
 
 class GlobalExceptionHandlerTest {
@@ -95,6 +97,20 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/test/errors/not-found")
     public void notFound() {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
+    @PostMapping(
+        value = "/test/errors/multipart",
+        consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public void multipartFile(@RequestPart("file") MultipartFile file) {
+      // 필수 파일이 없으면 메서드 실행 전에 실패
+    }
+
+    @PostMapping("/test/errors/upload-too-large")
+    public void uploadTooLarge() {
+      // 크기 초과 예외의 공통 응답 변환을 검증하기 위해 발생
+      throw new MaxUploadSizeExceededException(5L * 1024 * 1024);
     }
   }
 
@@ -328,6 +344,45 @@ class GlobalExceptionHandlerTest {
 
     // then
     assertSame(exception, thrown);
+  }
+
+  @Test
+  @DisplayName("multipart 필수 파일 누락 -> 공통 400 응답")
+  void handleMissingServletRequestPartExceptionTest() throws Exception {
+    // given
+    var request = multipart("/test/errors/multipart");
+
+    // when
+    ResultActions result = mockMvc.perform(request);
+
+    // then
+    assertInvalidInputResponse(result);
+    assertResolvedException(
+        result,
+        MissingServletRequestPartException.class
+    );
+  }
+
+  @Test
+  @DisplayName("업로드 크기 초과 예외 -> 공통 413 응답")
+  void handleMaxUploadSizeExceededExceptionTest() throws Exception {
+    // given
+    var request = post("/test/errors/upload-too-large");
+
+    // when
+    ResultActions result = mockMvc.perform(request);
+
+    // then
+    assertErrorResponse(
+        result,
+        413,
+        "PAYLOAD_TOO_LARGE",
+        "허용된 요청 크기를 초과했습니다."
+    );
+    assertResolvedException(
+        result,
+        MaxUploadSizeExceededException.class
+    );
   }
 
   // HTTP 상태와 공통 오류 응답의 구조 및 값 검증

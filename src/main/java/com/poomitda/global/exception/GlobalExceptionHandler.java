@@ -10,6 +10,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.*;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice
@@ -224,6 +226,71 @@ public class GlobalExceptionHandler {
     log.error("요청 처리 중 예상하지 못한 서버 오류가 발생했습니다.", exception);
 
     CommonErrorCode commonErrorCode = CommonErrorCode.INTERNAL_SERVER_ERROR;
+
+    return ResponseEntity
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
+  }
+
+  /**
+   * <p>파일 또는 multipart 요청 전체가 허용된 크기를 초과한 경우를 처리한다.</p>
+   *
+   * <p>호출 상황:</p>
+   * <ul>
+   *   <li>업로드 파일이 {@code spring.servlet.multipart.max-file-size}를 초과한 경우</li>
+   *   <li>multipart 요청 전체가 {@code spring.servlet.multipart.max-request-size}를 초과한 경우</li>
+   *   <li>크기 초과가 {@link MaxUploadSizeExceededException}으로 전달된 경우</li>
+   * </ul>
+   *
+   * <p>요청 전체 크기에는 파일 데이터뿐 아니라 multipart 구분자와 각 부분의 헤더 등이 포함된다.</p>
+   * <p>서비스의 파일 검증에 도달하기 전 발생한 크기 초과도 공통 오류 형식으로 반환한다.</p>
+   * <p>서비스에서 크기 초과를 나타내는 {@link BusinessException}을 발생시킨 경우에는
+   * {@link #handleBusinessException(BusinessException)}에서 처리한다.</p>
+   *
+   * <p>내부 예외 메시지는 응답에 노출하지 않고 오류 코드의 기본 메시지를 사용한다.</p>
+   * <p>프록시나 서블릿 컨테이너에서 요청을 직접 거부하여 이 예외 처리기로 전달되지 않은 경우는
+   * 처리 대상에 포함되지 않는다.</p>
+   *
+   * @param exception 파일 또는 multipart 요청 전체의 크기 초과 예외
+   * @return HTTP 413 / PAYLOAD_TOO_LARGE / 기본 메시지
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceededException(
+      MaxUploadSizeExceededException exception
+  ) {
+    CommonErrorCode commonErrorCode = CommonErrorCode.PAYLOAD_TOO_LARGE;
+
+    return ResponseEntity
+        .status(commonErrorCode.getHttpStatus())
+        .body(ErrorResponse.of(commonErrorCode));
+  }
+
+  /**
+   * <p>multipart 요청에서 필수 요청 부분이 누락된 경우를 처리한다.</p>
+   *
+   * <p>호출 상황:</p>
+   * <ul>
+   *   <li>필수 {@code @RequestPart}에 해당하는 요청 부분을 생략한 경우</li>
+   *   <li>요청 부분의 이름이 컨트롤러에서 지정한 이름과 일치하지 않는 경우</li>
+   *   <li>예: 이미지 업로드 요청에서 {@code file} 부분 없이 전송한 경우</li>
+   * </ul>
+   *
+   * <p>필수 요청 부분을 찾지 못해 {@link MissingServletRequestPartException}이 발생한 경우에 적용한다.</p>
+   * <p>파일 부분은 존재하지만 내용이 0바이트인 경우에는 서비스의 파일 검증에서 별도로 처리한다.</p>
+   * <p>쿼리 파라미터 누락이나 JSON 본문 내부의 필드 누락은 이 메서드의 처리 대상이 아니다.</p>
+   *
+   * <p>다른 multipart API에서도 사용할 수 있도록 이미지 전용 문구 대신 공통 오류 코드의
+   * 기본 메시지를 반환한다.</p>
+   * <p>누락된 요청 부분의 이름과 내부 예외 메시지는 응답에 노출하지 않는다.</p>
+   *
+   * @param exception multipart 요청의 필수 부분 누락 예외
+   * @return HTTP 400 / INVALID_INPUT_VALUE / 기본 메시지
+   */
+  @ExceptionHandler(MissingServletRequestPartException.class)
+  public ResponseEntity<ErrorResponse> handleMissingServletRequestPartException(
+      MissingServletRequestPartException exception
+  ) {
+    CommonErrorCode commonErrorCode = CommonErrorCode.INVALID_INPUT_VALUE;
 
     return ResponseEntity
         .status(commonErrorCode.getHttpStatus())
