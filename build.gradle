@@ -28,6 +28,14 @@ dependencies {
     // Spring Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
+    // AWS SDK
+    implementation platform('software.amazon.awssdk:bom:2.57.4')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:signin'
+
+    // WebP Image Decoding
+    runtimeOnly 'com.twelvemonkeys.imageio:imageio-webp:3.15.0'
+
     // JWT
     implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
