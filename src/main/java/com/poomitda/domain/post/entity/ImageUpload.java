@@ -3,6 +3,8 @@ package com.poomitda.domain.post.entity;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.post.entity.constant.ImageUploadStatus;
 import com.poomitda.global.entity.BaseUpdatedTimeEntity;
+import com.poomitda.global.exception.CommonErrorCode;
+import com.poomitda.global.exception.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -55,5 +57,15 @@ public class ImageUpload extends BaseUpdatedTimeEntity {
     this.imageKey = imageKey;
     this.imageUrl = imageUrl;
     this.status = ImageUploadStatus.PENDING;
+  }
+
+  public void attachToPost() {
+    // 현재 상태가 PENDING이 아닐 경우
+    if (this.status != ImageUploadStatus.PENDING) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 현재 상태가 PENDING일 경우
+    this.status = ImageUploadStatus.ATTACHED;
   }
 }

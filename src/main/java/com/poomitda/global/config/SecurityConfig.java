@@ -89,10 +89,11 @@ public class SecurityConfig {
                 "/api/posts"
             ).permitAll()
 
-            // 이미지 업로드는 보호자 권한만 허용
+            // 이미지 업로드와 공고 등록은 보호자 권한만 허용
             .requestMatchers(
                 HttpMethod.POST,
-                "/api/images"
+                "/api/images",
+                "/api/posts"
             ).hasAuthority("ROLE_PROTECTOR")
 
             // 위 규칙에 해당하지 않는 요청은 인증 필요
