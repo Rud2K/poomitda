@@ -8,6 +8,7 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.exception.MemberErrorCode;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.exception.BusinessException;
 import com.poomitda.global.request.PatchField;
@@ -30,6 +31,9 @@ class MemberServiceTest {
 
   @Mock
   private PasswordEncoder passwordEncoder;
+
+  @Mock
+  private PostRepository postRepository;
 
   @InjectMocks
   private MemberService memberService;
@@ -830,7 +834,7 @@ class MemberServiceTest {
   }
 
   @Test
-  @DisplayName("공개 프로필 조회 결과 없음 -> 회원 없음 오류")
+  @DisplayName("공개 프로필 조회 결과 없음 -> 회원 없음 오류 및 공고 수 조회 중단")
   void getPublicProfileMemberNotFoundTest() {
     // given
     Long memberId = 1L;
@@ -853,5 +857,69 @@ class MemberServiceTest {
     );
 
     verify(memberRepository).findByMemberIdAndStatusNot(memberId, MemberStatus.DELETED);
+
+    verifyNoInteractions(postRepository);
+  }
+
+  @Test
+  @DisplayName("작성 공고 존재 -> 조회된 공고 수를 공개 프로필에 반환")
+  void getPublicProfileWithPostsTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    when(memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    )).thenReturn(Optional.of(member));
+
+    when(postRepository.countByAuthor_MemberIdAndDeletedAtIsNull(memberId)).thenReturn(5L);
+
+    // when
+    MemberResponseDto.PublicProfileResponse response = memberService.getPublicProfile(memberId);
+
+    // then
+    assertEquals(5L, response.postCount());
+
+    verify(postRepository).countByAuthor_MemberIdAndDeletedAtIsNull(memberId);
+  }
+
+  @Test
+  @DisplayName("작성 공고 없음 -> 공개 프로필의 공고 수 0 반환")
+  void getPublicProfileWithoutPostsTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+
+    when(memberRepository.findByMemberIdAndStatusNot(
+        memberId,
+        MemberStatus.DELETED
+    )).thenReturn(Optional.of(member));
+
+    when(postRepository.countByAuthor_MemberIdAndDeletedAtIsNull(memberId)).thenReturn(0L);
+
+    // when
+    MemberResponseDto.PublicProfileResponse response = memberService.getPublicProfile(memberId);
+
+    // then
+    assertEquals(0L, response.postCount());
+
+    verify(postRepository).countByAuthor_MemberIdAndDeletedAtIsNull(memberId);
   }
 }

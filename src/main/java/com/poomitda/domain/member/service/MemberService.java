@@ -5,6 +5,7 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.MemberStatus;
 import com.poomitda.domain.member.exception.*;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.exception.exception.BusinessException;
 import java.math.*;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ public class MemberService {
 
   private final MemberRepository memberRepository;
   private final PasswordEncoder passwordEncoder;
+  private final PostRepository postRepository;
 
   /**
    * 회원가입 정보를 바탕으로 회원을 생성하고 저장한다.
@@ -221,7 +223,7 @@ public class MemberService {
     );
 
     // 해당 회원이 작성한 유효 공고 수 조회
-    // TODO: 공고 도메인 연결 후 작성 필요
+    long postCount = postRepository.countByAuthor_MemberIdAndDeletedAtIsNull(memberId);
 
     // 회원의 평점 합계와 후기 수로 평균 평점 계산 (후기가 없으면 null)
     Double averageRating = null;
@@ -241,7 +243,7 @@ public class MemberService {
         member.getMemberId(),
         member.getNickname(),
         member.getRole(),
-        0L, // TODO: 공고 도메인 연결 후 수정 필요
+        postCount,
         averageRating,
         member.getReviewCount()
     );
