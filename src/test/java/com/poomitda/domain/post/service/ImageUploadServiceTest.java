@@ -45,6 +45,7 @@ class ImageUploadServiceTest {
 
   @BeforeEach
   void setUp() {
+    // given
     when(authenticationService.authenticate(1L))
         .thenReturn(new MemberPrincipal(1L, MemberRole.ROLE_PROTECTOR));
 
@@ -58,8 +59,10 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("검증된 이미지를 업로드하고 이력을 저장한 뒤 키와 URL을 반환한다")
   void uploadsImageAndSavesHistory() {
+    // when
     var response = service.upload(1L, file);
 
+    // then
     ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
 
     InOrder order = inOrder(storage, historyService);
@@ -92,14 +95,17 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("보호자 권한이 없으면 파일 검증과 업로드를 진행하지 않는다")
   void rejectsNonProtector() {
+    // given
     when(authenticationService.authenticate(1L))
         .thenReturn(new MemberPrincipal(1L, MemberRole.ROLE_USER));
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.upload(1L, file)
     );
 
+    // then
     assertEquals(CommonErrorCode.FORBIDDEN, exception.getErrorCode());
     verifyNoInteractions(validator, storage, historyService);
   }
@@ -107,15 +113,18 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("파일 검증에 실패하면 S3와 DB에 저장하지 않는다")
   void stopsWhenValidationFails() {
+    // given
     BusinessException failure = new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
 
     when(validator.validate(file)).thenThrow(failure);
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.upload(1L, file)
     );
 
+    // then
     assertSame(failure, exception);
     verifyNoInteractions(storage, historyService);
   }
@@ -123,15 +132,18 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("S3 업로드에 실패하면 이력을 저장하지 않는다")
   void stopsWhenUploadFails() {
+    // given
     RuntimeException failure = new RuntimeException("테스트용 S3 업로드 실패");
 
     doThrow(failure).when(storage).upload(anyString(), any(byte[].class), anyString());
 
+    // when
     RuntimeException exception = assertThrows(
         RuntimeException.class,
         () -> service.upload(1L, file)
     );
 
+    // then
     assertSame(failure, exception);
     verifyNoInteractions(historyService);
     verify(storage, never()).delete(anyString());
@@ -140,15 +152,18 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("이력 저장에 실패하면 업로드한 이미지를 삭제한다")
   void deletesImageWhenHistorySaveFails() {
+    // given
     RuntimeException failure = new RuntimeException("테스트용 DB 저장 실패");
 
     doThrow(failure).when(historyService).savePending(eq(1L), anyString(), eq(IMAGE_URL));
 
+    // when
     RuntimeException exception = assertThrows(
         RuntimeException.class,
         () -> service.upload(1L, file)
     );
 
+    // then
     ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
 
     InOrder order = inOrder(storage, historyService);
@@ -170,6 +185,7 @@ class ImageUploadServiceTest {
   @Test
   @DisplayName("이미지 정리에도 실패하면 원래 오류를 유지하고 삭제 오류를 보존한다")
   void preservesOriginalFailureWhenCleanupFails() {
+    // given
     RuntimeException saveFailure = new RuntimeException("테스트용 DB 저장 실패");
 
     RuntimeException cleanupFailure = new RuntimeException("테스트용 S3 삭제 실패");
@@ -178,11 +194,13 @@ class ImageUploadServiceTest {
 
     doThrow(cleanupFailure).when(storage).delete(anyString());
 
+    // when
     RuntimeException exception = assertThrows(
         RuntimeException.class,
         () -> service.upload(1L, file)
     );
 
+    // then
     assertSame(saveFailure, exception);
     assertEquals(1, exception.getSuppressed().length);
     assertSame(cleanupFailure, exception.getSuppressed()[0]);

@@ -64,6 +64,7 @@ class ImageUploadMultipartIntegrationTest {
 
   @BeforeEach
   void setUp() {
+    // given
     client = RestClient.builder()
         .baseUrl("http://localhost:" + port)
         // 4xx 응답도 예외로 바꾸지 않고 상태와 본문을 검사한다.
@@ -84,6 +85,7 @@ class ImageUploadMultipartIntegrationTest {
   @Test
   @DisplayName("정확히 5MB인 파일은 서버의 multipart 크기 검사를 통과한다")
   void acceptsFileAtSizeLimit() {
+    // given
     when(imageUploadService.upload(eq(1L), any(MultipartFile.class)))
         .thenAnswer(invocation -> {
           MultipartFile uploadedFile = invocation.getArgument(1);
@@ -100,8 +102,10 @@ class ImageUploadMultipartIntegrationTest {
     MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
     body.add("file", createFile(MAX_FILE_SIZE, "photo.png"));
 
+    // when
     ResponseEntity<Map<String, Object>> response = upload(body);
 
+    // then
     assertEquals(200, response.getStatusCode().value());
     assertEquals("SUCCESS", requireBody(response).get("code"));
 
@@ -112,9 +116,11 @@ class ImageUploadMultipartIntegrationTest {
   @Test
   @DisplayName("5MB보다 1바이트 큰 파일은 413으로 거부한다")
   void rejectsFileOverSizeLimit() {
+    // given
     MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
     body.add("file", createFile(MAX_FILE_SIZE + 1, "photo.png"));
 
+    // when & then
     assertPayloadTooLarge(upload(body));
 
     verifyNoInteractions(imageUploadService, s3Client);
@@ -123,6 +129,7 @@ class ImageUploadMultipartIntegrationTest {
   @Test
   @DisplayName("각 파일이 5MB 이하여도 요청 전체가 6MB를 초과하면 거부한다")
   void rejectsRequestOverTotalSizeLimit() {
+    // given
     MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
 
     int fileSize = 3 * 1024 * 1024 + 1024;
@@ -130,6 +137,7 @@ class ImageUploadMultipartIntegrationTest {
     body.add("file", createFile(fileSize, "photo.png"));
     body.add("extra", createFile(fileSize, "extra.png"));
 
+    // when & then
     assertPayloadTooLarge(upload(body));
 
     verifyNoInteractions(imageUploadService, s3Client);

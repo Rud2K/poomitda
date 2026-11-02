@@ -36,14 +36,17 @@ class ImageUploadHistoryServiceTest {
   @Test
   @DisplayName("정상 보호자의 이미지 업로드 이력을 PENDING 상태로 저장한다")
   void savesPendingHistory() {
+    // given
     Member member = mock(Member.class);
 
     when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
     when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
     when(member.getRole()).thenReturn(MemberRole.ROLE_PROTECTOR);
 
+    // when
     service.savePending(1L, IMAGE_KEY, IMAGE_URL);
 
+    // then
     ArgumentCaptor<ImageUpload> captor = ArgumentCaptor.forClass(ImageUpload.class);
 
     verify(imageUploadRepository).save(captor.capture());
@@ -59,13 +62,16 @@ class ImageUploadHistoryServiceTest {
   @Test
   @DisplayName("회원이 존재하지 않으면 인증 오류가 발생하고 저장하지 않는다")
   void rejectsMissingMember() {
+    // given
     when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.savePending(1L, IMAGE_KEY, IMAGE_URL)
     );
 
+    // then
     assertEquals(CommonErrorCode.UNAUTHORIZED, exception.getErrorCode());
     verifyNoInteractions(imageUploadRepository);
   }
@@ -73,16 +79,19 @@ class ImageUploadHistoryServiceTest {
   @Test
   @DisplayName("탈퇴한 회원이면 인증 오류가 발생하고 저장하지 않는다")
   void rejectsDeletedMember() {
+    // given
     Member member = mock(Member.class);
 
     when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
     when(member.getStatus()).thenReturn(MemberStatus.DELETED);
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.savePending(1L, IMAGE_KEY, IMAGE_URL)
     );
 
+    // then
     assertEquals(CommonErrorCode.UNAUTHORIZED, exception.getErrorCode());
     verifyNoInteractions(imageUploadRepository);
   }
@@ -90,17 +99,20 @@ class ImageUploadHistoryServiceTest {
   @Test
   @DisplayName("일반 회원이면 권한 오류가 발생하고 저장하지 않는다")
   void rejectsRegularMember() {
+    // given
     Member member = mock(Member.class);
 
     when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
     when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
     when(member.getRole()).thenReturn(MemberRole.ROLE_USER);
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.savePending(1L, IMAGE_KEY, IMAGE_URL)
     );
 
+    // then
     assertEquals(CommonErrorCode.FORBIDDEN, exception.getErrorCode());
     verifyNoInteractions(imageUploadRepository);
   }
@@ -108,17 +120,20 @@ class ImageUploadHistoryServiceTest {
   @Test
   @DisplayName("관리자도 보호자 권한이 아니면 저장할 수 없다")
   void rejectsAdmin() {
+    // given
     Member member = mock(Member.class);
 
     when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
     when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
     when(member.getRole()).thenReturn(MemberRole.ROLE_ADMIN);
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.savePending(1L, IMAGE_KEY, IMAGE_URL)
     );
 
+    // then
     assertEquals(CommonErrorCode.FORBIDDEN, exception.getErrorCode());
     verifyNoInteractions(imageUploadRepository);
   }

@@ -59,6 +59,7 @@ class ImageUploadControllerTest {
   @Test
   @DisplayName("보호자의 이미지 업로드 요청 -> 공통 200 응답")
   void uploadsImage() throws Exception {
+    // given
     MockMultipartFile file = createFile();
 
     when(imageUploadService.upload(eq(1L), any(MultipartFile.class)))
@@ -67,6 +68,7 @@ class ImageUploadControllerTest {
             IMAGE_URL
         ));
 
+    // when & then
     mockMvc.perform(multipart("/api/images")
             .file(file)
             .with(asMember(MemberRole.ROLE_PROTECTOR))
@@ -84,6 +86,7 @@ class ImageUploadControllerTest {
   @Test
   @DisplayName("인증되지 않은 이미지 업로드 요청 -> 401")
   void rejectsUnauthenticatedRequest() throws Exception {
+    // when & then
     mockMvc.perform(multipart("/api/images")
             .file(createFile())
         )
@@ -97,6 +100,7 @@ class ImageUploadControllerTest {
   @Test
   @DisplayName("일반 회원의 이미지 업로드 요청 -> 403")
   void rejectsRegularMember() throws Exception {
+    // when & then
     mockMvc.perform(multipart("/api/images")
             .file(createFile())
             .with(asMember(MemberRole.ROLE_USER))
@@ -110,6 +114,7 @@ class ImageUploadControllerTest {
   @Test
   @DisplayName("관리자의 이미지 업로드 요청 -> 403")
   void rejectsAdmin() throws Exception {
+    // when & then
     mockMvc.perform(multipart("/api/images")
             .file(createFile())
             .with(asMember(MemberRole.ROLE_ADMIN))
@@ -123,6 +128,7 @@ class ImageUploadControllerTest {
   @Test
   @DisplayName("보호자의 요청에서 필수 파일 누락 -> 400")
   void rejectsMissingFile() throws Exception {
+    // when & then
     mockMvc.perform(multipart("/api/images")
             .with(asMember(MemberRole.ROLE_PROTECTOR))
         )

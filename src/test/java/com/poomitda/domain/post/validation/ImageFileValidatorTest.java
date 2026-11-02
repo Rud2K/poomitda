@@ -24,11 +24,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("정상 PNG 이미지는 검증을 통과하고 원본 바이트를 반환한다")
   void acceptsPng() throws IOException {
+    // given
     byte[] bytes = createImage("png");
     MockMultipartFile file = file("photo.png", "image/png", bytes);
 
+    // when
     ValidatedImage result = validator.validate(file);
 
+    // then
     assertEquals(ImageFormat.PNG, result.format());
     assertArrayEquals(bytes, result.bytes());
   }
@@ -36,11 +39,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("대문자 JPEG 확장자도 허용한다")
   void acceptsUppercaseJpegExtension() throws IOException {
+    // given
     byte[] bytes = createImage("jpeg");
     MockMultipartFile file = file("photo.JPEG", "image/jpeg", bytes);
 
+    // when
     ValidatedImage result = validator.validate(file);
 
+    // then
     assertEquals(ImageFormat.JPEG, result.format());
     assertArrayEquals(bytes, result.bytes());
   }
@@ -48,14 +54,17 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("클라이언트의 콘텐츠 타입 대신 실제 이미지 형식을 사용한다")
   void detectsFormatFromContent() throws IOException {
+    // given
     MockMultipartFile file = file(
         "photo.png",
         "application/octet-stream",
         createImage("png")
     );
 
+    // when
     ValidatedImage result = validator.validate(file);
 
+    // then
     assertEquals(ImageFormat.PNG, result.format());
     assertEquals("image/png", result.format().getContentType());
   }
@@ -63,6 +72,7 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("파일이 없으면 입력값 오류를 반환한다")
   void rejectsNullFile() {
+    // when & then
     assertError(
         CommonErrorCode.INVALID_INPUT_VALUE,
         () -> validator.validate(null)
@@ -72,8 +82,10 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("빈 파일이면 입력값 오류를 반환한다")
   void rejectsEmptyFile() {
+    // given
     MockMultipartFile file = file("photo.png", "image/png", new byte[0]);
 
+    // when & then
     assertError(
         CommonErrorCode.INVALID_INPUT_VALUE,
         () -> validator.validate(file)
@@ -83,12 +95,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("5MB를 1바이트 초과하면 용량 초과 오류를 반환한다")
   void rejectsOversizedFile() {
+    // given
     MockMultipartFile file = file(
         "photo.png",
         "image/png",
         new byte[MAX_FILE_SIZE + 1]
     );
 
+    // when & then
     assertError(
         CommonErrorCode.PAYLOAD_TOO_LARGE,
         () -> validator.validate(file)
@@ -98,12 +112,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("허용되지 않은 확장자는 실제 이미지여도 거절한다")
   void rejectsUnsupportedExtension() throws IOException {
+    // given
     MockMultipartFile file = file(
         "photo.gif",
         "image/png",
         createImage("png")
     );
 
+    // when & then
     assertError(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         () -> validator.validate(file)
@@ -113,12 +129,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("확장자와 실제 이미지 형식이 다르면 거절한다")
   void rejectsFormatMismatch() throws IOException {
+    // given
     MockMultipartFile file = file(
         "photo.jpg",
         "image/jpeg",
         createImage("png")
     );
 
+    // when & then
     assertError(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         () -> validator.validate(file)
@@ -128,12 +146,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("이미지 확장자를 가진 텍스트 파일은 거절한다")
   void rejectsTextDisguisedAsImage() {
+    // given
     MockMultipartFile file = file(
         "photo.png",
         "image/png",
         "이 파일은 이미지가 아닙니다.".getBytes(StandardCharsets.UTF_8)
     );
 
+    // when & then
     assertError(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         () -> validator.validate(file)
@@ -143,6 +163,7 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("신고된 크기가 작아도 실제 데이터가 5MB를 초과하면 거절한다")
   void rejectsActualContentExceedingLimit() {
+    // given
     MockMultipartFile file = new MockMultipartFile(
         "file",
         "photo.png",
@@ -155,6 +176,7 @@ class ImageFileValidatorTest {
       }
     };
 
+    // when & then
     assertError(
         CommonErrorCode.PAYLOAD_TOO_LARGE,
         () -> validator.validate(file)
@@ -164,6 +186,7 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("PNG 식별 정보만 있고 이미지 데이터가 없으면 거절한다")
   void rejectsTruncatedPng() throws IOException {
+    // given
     byte[] validPng = createImage("png");
     byte[] truncatedPng = Arrays.copyOf(validPng, 8);
 
@@ -173,6 +196,7 @@ class ImageFileValidatorTest {
         truncatedPng
     );
 
+    // when & then
     assertError(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         () -> validator.validate(file)
@@ -182,6 +206,7 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("파일 읽기 실패는 원인을 보존한 서버 측 예외로 전달한다")
   void preservesFileReadFailure() {
+    // given
     IOException cause = new IOException("테스트용 파일 읽기 실패");
 
     MockMultipartFile file = new MockMultipartFile(
@@ -196,17 +221,20 @@ class ImageFileValidatorTest {
       }
     };
 
+    // when
     UncheckedIOException exception = assertThrows(
         UncheckedIOException.class,
         () -> validator.validate(file)
     );
 
+    // then
     assertSame(cause, exception.getCause());
   }
 
   @Test
   @DisplayName("정상 WebP 이미지는 검증을 통과한다")
   void acceptsWebp() throws IOException {
+    // given
     byte[] bytes = readSampleWebp();
     MockMultipartFile file = file(
         "sample.webp",
@@ -214,8 +242,10 @@ class ImageFileValidatorTest {
         bytes
     );
 
+    // when
     ValidatedImage result = validator.validate(file);
 
+    // then
     assertEquals(ImageFormat.WEBP, result.format());
     assertEquals("image/webp", result.format().getContentType());
     assertArrayEquals(bytes, result.bytes());
@@ -224,12 +254,14 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("WebP 데이터를 PNG 확장자로 보내면 거절한다")
   void rejectsWebpWithPngExtension() throws IOException {
+    // given
     MockMultipartFile file = file(
         "sample.png",
         "image/png",
         readSampleWebp()
     );
 
+    // when & then
     assertError(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         () -> validator.validate(file)
@@ -239,14 +271,17 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("정확히 5MB인 정상 PNG는 허용한다")
   void acceptsPngAtFileSizeLimit() throws IOException {
+    // given
     byte[] bytes = createPngWithExactSize(MAX_FILE_SIZE);
 
     assertEquals(MAX_FILE_SIZE, bytes.length);
 
+    // when
     ValidatedImage result = validator.validate(
         file("boundary.png", "image/png", bytes)
     );
 
+    // then
     assertEquals(ImageFormat.PNG, result.format());
     assertArrayEquals(bytes, result.bytes());
   }
@@ -254,24 +289,29 @@ class ImageFileValidatorTest {
   @Test
   @DisplayName("정확히 2,500만 픽셀인 PNG는 허용한다")
   void acceptsPngAtPixelLimit() throws IOException {
+    // given
     byte[] bytes = createBinaryPng(5_000, 5_000);
 
     assertTrue(bytes.length < MAX_FILE_SIZE);
 
+    // when
     ValidatedImage result = validator.validate(
         file("boundary.png", "image/png", bytes)
     );
 
+    // then
     assertEquals(ImageFormat.PNG, result.format());
   }
 
   @Test
   @DisplayName("2,500만 픽셀을 초과한 PNG는 거절한다")
   void rejectsPngAbovePixelLimit() throws IOException {
+    // given
     byte[] bytes = createBinaryPng(5_001, 5_000);
 
     assertTrue(bytes.length < MAX_FILE_SIZE);
 
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> validator.validate(
@@ -279,6 +319,7 @@ class ImageFileValidatorTest {
         )
     );
 
+    // then
     assertEquals(
         ImageUploadErrorCode.UPLOAD_NOT_ALLOWED,
         exception.getErrorCode()
@@ -390,11 +431,13 @@ class ImageFileValidatorTest {
   }
 
   private void assertError(ErrorCode expected, Runnable action) {
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         action::run
     );
 
+    // then
     assertEquals(expected, exception.getErrorCode());
   }
 }

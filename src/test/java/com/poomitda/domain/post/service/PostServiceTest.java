@@ -50,6 +50,7 @@ class PostServiceTest {
   @Test
   @DisplayName("정상 공고 등록 -> 공고 및 이미지 저장과 업로드 이력 연결")
   void createsPostAndAttachesImages() {
+    // given
     Member author = prepareAuthor(
         MemberStatus.ACTIVE,
         MemberRole.ROLE_PROTECTOR
@@ -73,8 +74,10 @@ class PostServiceTest {
         )
     );
 
+    // when
     CreatePostResponse response = service.createPost(MEMBER_ID, request);
 
+    // then
     assertEquals(POST_ID, response.postId());
 
     ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
@@ -150,6 +153,7 @@ class PostServiceTest {
   @Test
   @DisplayName("접수 마감 시각 없음 -> null 저장")
   void preservesNullDeadline() {
+    // given
     Member author = prepareAuthor(
         MemberStatus.ACTIVE,
         MemberRole.ROLE_PROTECTOR
@@ -157,8 +161,10 @@ class PostServiceTest {
     preparePendingUpload(author);
     prepareSavedPost();
 
+    // when
     service.createPost(MEMBER_ID, validRequest());
 
+    // then
     ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
     verify(postRepository).save(captor.capture());
 
@@ -168,11 +174,13 @@ class PostServiceTest {
   @Test
   @DisplayName("입력값 조합 오류 -> DB 조회 및 저장 중단")
   void rejectsInvalidInputBeforeDatabaseAccess() {
+    // given
     CreatePostRequest request = createRequest(
         null,
         List.of(new PostImageRequest(IMAGE_URL_1, false, 0))
     );
 
+    // when & then
     assertRejected(request, CommonErrorCode.INVALID_INPUT_VALUE);
 
     verifyNoInteractions(memberRepository, imageUploadRepository);
@@ -181,8 +189,10 @@ class PostServiceTest {
   @Test
   @DisplayName("회원 없음 -> 인증 오류 및 저장 중단")
   void rejectsMissingMember() {
+    // given
     when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.empty());
 
+    // when & then
     assertRejected(validRequest(), CommonErrorCode.UNAUTHORIZED);
 
     verifyNoInteractions(imageUploadRepository);
@@ -191,8 +201,10 @@ class PostServiceTest {
   @Test
   @DisplayName("탈퇴한 회원 -> 인증 오류 및 저장 중단")
   void rejectsDeletedMember() {
+    // given
     prepareAuthor(MemberStatus.DELETED, MemberRole.ROLE_PROTECTOR);
 
+    // when & then
     assertRejected(validRequest(), CommonErrorCode.UNAUTHORIZED);
 
     verifyNoInteractions(imageUploadRepository);
@@ -205,8 +217,10 @@ class PostServiceTest {
   )
   @DisplayName("보호자가 아닌 회원 -> 권한 오류 및 저장 중단")
   void rejectsNonProtector(MemberRole role) {
+    // given
     prepareAuthor(MemberStatus.ACTIVE, role);
 
+    // when & then
     assertRejected(validRequest(), CommonErrorCode.FORBIDDEN);
 
     verifyNoInteractions(imageUploadRepository);
@@ -215,6 +229,7 @@ class PostServiceTest {
   @Test
   @DisplayName("업로드 이력 누락 -> 입력값 오류 및 저장 중단")
   void rejectsMissingUpload() {
+    // given
     Member author = prepareAuthor(
         MemberStatus.ACTIVE,
         MemberRole.ROLE_PROTECTOR
@@ -233,6 +248,7 @@ class PostServiceTest {
         )
     );
 
+    // when & then
     assertRejected(request, CommonErrorCode.INVALID_INPUT_VALUE);
 
     assertEquals(ImageUploadStatus.PENDING, upload.getStatus());
@@ -241,6 +257,7 @@ class PostServiceTest {
   @Test
   @DisplayName("다른 회원의 이미지 사용 -> 입력값 오류 및 저장 중단")
   void rejectsAnotherMembersUpload() {
+    // given
     prepareAuthor(MemberStatus.ACTIVE, MemberRole.ROLE_PROTECTOR);
 
     Member otherMember = mock(Member.class);
@@ -248,6 +265,7 @@ class PostServiceTest {
 
     ImageUpload upload = preparePendingUpload(otherMember);
 
+    // when & then
     assertRejected(validRequest(), CommonErrorCode.INVALID_INPUT_VALUE);
 
     assertEquals(ImageUploadStatus.PENDING, upload.getStatus());
@@ -256,6 +274,7 @@ class PostServiceTest {
   @Test
   @DisplayName("이미 연결된 이미지 사용 -> 입력값 오류 및 저장 중단")
   void rejectsAttachedUpload() {
+    // given
     Member author = prepareAuthor(
         MemberStatus.ACTIVE,
         MemberRole.ROLE_PROTECTOR
@@ -264,6 +283,7 @@ class PostServiceTest {
     ImageUpload upload = preparePendingUpload(author);
     upload.attachToPost();
 
+    // when & then
     assertRejected(validRequest(), CommonErrorCode.INVALID_INPUT_VALUE);
 
     assertEquals(ImageUploadStatus.ATTACHED, upload.getStatus());
@@ -272,6 +292,7 @@ class PostServiceTest {
   @Test
   @DisplayName("공고 이미지 저장 실패 -> 기존 예외 전달 및 상태 전환 중단")
   void propagatesImageSaveFailure() {
+    // given
     Member author = prepareAuthor(
         MemberStatus.ACTIVE,
         MemberRole.ROLE_PROTECTOR
@@ -285,11 +306,13 @@ class PostServiceTest {
         .when(postImageRepository)
         .saveAll(anyList());
 
+    // when
     RuntimeException exception = assertThrows(
         RuntimeException.class,
         () -> service.createPost(MEMBER_ID, validRequest())
     );
 
+    // then
     assertSame(failure, exception);
     assertEquals(ImageUploadStatus.PENDING, upload.getStatus());
   }
@@ -357,11 +380,13 @@ class PostServiceTest {
       CreatePostRequest request,
       CommonErrorCode expectedCode
   ) {
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> service.createPost(MEMBER_ID, request)
     );
 
+    // then
     assertEquals(expectedCode, exception.getErrorCode());
     verifyNoInteractions(postRepository, postImageRepository);
   }

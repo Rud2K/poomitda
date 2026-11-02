@@ -23,24 +23,28 @@ class PostCreateValidatorTest {
   @Test
   @DisplayName("입양 공고의 임시 보호 기간 null -> 검증 통과")
   void acceptAdoptioWithoutFosterPeriod() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
         validImages()
     );
 
+    // when & then
     assertDoesNotThrow(() -> validator.validate(request));
   }
 
   @Test
   @DisplayName("임시보호 공고의 기간 입력 -> 검증 통과")
   void acceptsFosterWithPeriod() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.FOSTER,
         "3개월",
         validImages()
     );
 
+    // when & then
     assertDoesNotThrow(() -> validator.validate(request));
   }
 
@@ -49,12 +53,14 @@ class PostCreateValidatorTest {
   @ValueSource(strings = {" ", "   ", "\t", "\n"})
   @DisplayName("임시보호 공고의 기간 null 또는 빈 문자열 또는 공백 -> 입력값 오류")
   void rejectsFosterWithoutPeriod(String fosterPeriod) {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.FOSTER,
         fosterPeriod,
         validImages()
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
@@ -62,18 +68,21 @@ class PostCreateValidatorTest {
   @ValueSource(strings = {"", " ", "3개월"})
   @DisplayName("입양 공고의 임시보호 기간 입력 -> 입력값 오류")
   void rejectsAdoptionWithFosterPeriod(String fosterPeriod) {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         fosterPeriod,
         validImages()
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
   @Test
   @DisplayName("대표 이미지 없음 -> 입력값 오류")
   void rejectsMissingRepresentative() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
@@ -83,12 +92,14 @@ class PostCreateValidatorTest {
         )
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
   @Test
   @DisplayName("대표 이미지 두 개 -> 입력값 오류")
   void rejectsMultipleRepresentatives() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
@@ -98,12 +109,14 @@ class PostCreateValidatorTest {
         )
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
   @Test
   @DisplayName("이미지 URL 중복 -> 입력값 오류")
   void rejectsDuplicateImageUrls() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
@@ -113,12 +126,14 @@ class PostCreateValidatorTest {
         )
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
   @Test
   @DisplayName("이미지 표시 순서 중복 -> 입력값 오류")
   void rejectsDuplicateDisplayOrders() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
@@ -128,12 +143,14 @@ class PostCreateValidatorTest {
         )
     );
 
+    // when & then
     assertInvalidInput(request);
   }
 
   @Test
   @DisplayName("불연속 표시 순서 및 목록 뒤의 대표 이미지 -> 검증 통과")
   void acceptsNonConsecutiveOrdersAndLaterRepresentative() {
+    // given
     CreatePostRequest request = createRequest(
         NoticeType.ADOPTION,
         null,
@@ -143,6 +160,7 @@ class PostCreateValidatorTest {
         )
     );
 
+    // when & then
     assertDoesNotThrow(() -> validator.validate(request));
   }
 
@@ -174,11 +192,13 @@ class PostCreateValidatorTest {
   }
 
   private void assertInvalidInput(CreatePostRequest request) {
+    // when
     BusinessException exception = assertThrows(
         BusinessException.class,
         () -> validator.validate(request)
     );
 
+    // then
     assertEquals(
         CommonErrorCode.INVALID_INPUT_VALUE,
         exception.getErrorCode()
