@@ -3,17 +3,22 @@ package com.poomitda.domain.member.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.poomitda.domain.auth.entity.RefreshToken;
+import com.poomitda.domain.auth.repository.RefreshTokenRepository;
 import com.poomitda.domain.member.dto.*;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.exception.MemberErrorCode;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.entity.constant.PostStatus;
 import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.constant.*;
+import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
 import com.poomitda.global.request.PatchField;
 import java.sql.SQLException;
-import java.util.Optional;
+import java.time.*;
+import java.util.*;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +39,9 @@ class MemberServiceTest {
 
   @Mock
   private PostRepository postRepository;
+
+  @Mock
+  private RefreshTokenRepository refreshTokenRepository;
 
   @InjectMocks
   private MemberService memberService;
@@ -921,5 +929,217 @@ class MemberServiceTest {
     assertEquals(0L, response.postCount());
 
     verify(postRepository).countByAuthor_MemberIdAndDeletedAtIsNull(memberId);
+  }
+
+  @Test
+  @DisplayName("회원 없음 -> 회원 탈퇴 중단")
+  void withdrawMemberNotFoundTest() {
+    // given
+    Long memberId = 1L;
+
+    when(memberRepository.findByIdForUpdate(memberId)).thenReturn(Optional.empty());
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.withdraw(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.MEMBER_NOT_FOUND,
+        exception.getErrorCode()
+    );
+
+    verify(memberRepository).findByIdForUpdate(memberId);
+    verifyNoInteractions(postRepository, refreshTokenRepository);
+  }
+
+  @Test
+  @DisplayName("이미 탈퇴한 회원 -> 인증 실패로 회원 탈퇴 중단")
+  void withdrawDeletedMemberTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+
+    LocalDateTime deletedAt = LocalDateTime.of(2026, 1, 1, 0, 0);
+    member.withdraw(deletedAt);
+
+    when(memberRepository.findByIdForUpdate(memberId)).thenReturn(Optional.of(member));
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.withdraw(memberId)
+    );
+
+    // then
+    assertEquals(CommonErrorCode.UNAUTHORIZED, exception.getErrorCode());
+    assertEquals(MemberStatus.DELETED, member.getStatus());
+    assertEquals(deletedAt, member.getDeletedAt());
+
+    verify(memberRepository).findByIdForUpdate(memberId);
+    verifyNoInteractions(postRepository, refreshTokenRepository);
+  }
+
+  @Test
+  @DisplayName("진행 중인 공고 존재 -> 회원 탈퇴 중단")
+  void withdrawWithActivePostsTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+
+    when(memberRepository.findByIdForUpdate(memberId)).thenReturn(Optional.of(member));
+
+    List<PostStatus> activeStatuses = List.of(
+        PostStatus.RECRUITING,
+        PostStatus.RECEPTION_CLOSED
+    );
+
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    )).thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.withdraw(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS,
+        exception.getErrorCode()
+    );
+    assertEquals(MemberStatus.ACTIVE, member.getStatus());
+    assertNull(member.getDeletedAt());
+
+    verify(memberRepository).findByIdForUpdate(memberId);
+    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    );
+    verifyNoInteractions(refreshTokenRepository);
+  }
+
+  @Test
+  @DisplayName("진행 공고 없음 및 토큰 존재 -> 회원 탈퇴와 토큰 삭제")
+  void withdrawWithRefreshTokenTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+
+    RefreshToken refreshToken = new RefreshToken(
+        member,
+        "a".repeat(64),
+        LocalDateTime.now(ZoneOffset.UTC).plusDays(1)
+    );
+
+    List<PostStatus> activeStatuses = List.of(
+        PostStatus.RECRUITING,
+        PostStatus.RECEPTION_CLOSED
+    );
+
+    when(memberRepository.findByIdForUpdate(memberId))
+        .thenReturn(Optional.of(member));
+
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    )).thenReturn(false);
+
+    when(refreshTokenRepository.findByMember_MemberId(memberId))
+        .thenReturn(Optional.of(refreshToken));
+
+    // when
+    LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+    memberService.withdraw(memberId);
+    LocalDateTime after = LocalDateTime.now(ZoneOffset.UTC);
+
+    // then
+    assertEquals(MemberStatus.DELETED, member.getStatus());
+    assertNotNull(member.getDeletedAt());
+    assertFalse(member.getDeletedAt().isBefore(before));
+    assertFalse(member.getDeletedAt().isAfter(after));
+
+    verify(memberRepository).findByIdForUpdate(memberId);
+    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    );
+    verify(refreshTokenRepository).findByMember_MemberId(memberId);
+    verify(refreshTokenRepository).delete(refreshToken);
+  }
+
+  @Test
+  @DisplayName("진행 공고 및 토큰 없음 -> 회원 탈퇴 완료")
+  void withdrawWithoutRefreshTokenTest() {
+    // given
+    Long memberId = 1L;
+
+    Member member = new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+
+    List<PostStatus> activeStatuses = List.of(
+        PostStatus.RECRUITING,
+        PostStatus.RECEPTION_CLOSED
+    );
+
+    when(memberRepository.findByIdForUpdate(memberId))
+        .thenReturn(Optional.of(member));
+
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    )).thenReturn(false);
+
+    when(refreshTokenRepository.findByMember_MemberId(memberId))
+        .thenReturn(Optional.empty());
+
+    // when
+    LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+    memberService.withdraw(memberId);
+    LocalDateTime after = LocalDateTime.now(ZoneOffset.UTC);
+
+    // then
+    assertEquals(MemberStatus.DELETED, member.getStatus());
+    assertNotNull(member.getDeletedAt());
+    assertFalse(member.getDeletedAt().isBefore(before));
+    assertFalse(member.getDeletedAt().isAfter(after));
+
+    verify(memberRepository).findByIdForUpdate(memberId);
+    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        activeStatuses
+    );
+    verify(refreshTokenRepository).findByMember_MemberId(memberId);
+    verify(refreshTokenRepository, never()).delete(any(RefreshToken.class));
   }
 }
