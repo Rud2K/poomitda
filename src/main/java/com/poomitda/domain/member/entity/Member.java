@@ -4,6 +4,7 @@ import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.entity.BaseDeletedTimeEntity;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -94,5 +95,10 @@ public class Member extends BaseDeletedTimeEntity {
 
   public void changePreferredSpecies(Species preferredSpecies) {
     this.preferredSpecies = preferredSpecies;
+  }
+
+  public void withdraw(LocalDateTime deletedAt) {
+    this.markDeleted(deletedAt);
+    this.status = MemberStatus.DELETED;
   }
 }

@@ -24,6 +24,11 @@ public enum MemberErrorCode implements ErrorCode {
   MEMBER_NOT_FOUND(
       HttpStatus.NOT_FOUND,
       "존재하지 않는 회원입니다."
+  ),
+
+  CANNOT_WITHDRAW_ACTIVE_PROCESS(
+      HttpStatus.CONFLICT,
+      "진행 중인 입양/임보 신청 내역이나 모집 중인 공고가 있어 탈퇴할 수 없습니다."
   );
 
   private final HttpStatus httpStatus;

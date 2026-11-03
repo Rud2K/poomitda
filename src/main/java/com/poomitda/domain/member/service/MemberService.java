@@ -1,13 +1,18 @@
 package com.poomitda.domain.member.service;
 
+import com.poomitda.domain.auth.repository.RefreshTokenRepository;
 import com.poomitda.domain.member.dto.*;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.MemberStatus;
 import com.poomitda.domain.member.exception.*;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.entity.constant.PostStatus;
 import com.poomitda.domain.post.repository.PostRepository;
+import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
 import java.math.*;
+import java.time.*;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +26,7 @@ public class MemberService {
   private final MemberRepository memberRepository;
   private final PasswordEncoder passwordEncoder;
   private final PostRepository postRepository;
+  private final RefreshTokenRepository refreshTokenRepository;
 
   /**
    * 회원가입 정보를 바탕으로 회원을 생성하고 저장한다.
@@ -247,5 +253,47 @@ public class MemberService {
         averageRating,
         member.getReviewCount()
     );
+  }
+
+  /**
+   * 진행 중인 공고가 없는 회원을 탈퇴 처리하고 Refresh Token을 삭제한다.
+   *
+   * @param memberId 탈퇴할 회원의 ID
+   * @throws BusinessException 회원이 없거나 활동 상태가 아니거나 진행 중인 공고가 있는 경우
+   */
+  @Transactional
+  public void withdraw(Long memberId) {
+    // 회원을 잠금 조회하고, 존재하지 않으면 회원 없음 예외 발생
+    Member member = memberRepository.findByIdForUpdate(memberId)
+        .orElseThrow(
+            () -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND)
+        );
+
+    // 회원이 활동 상태가 아니면 인증 실패 예외 발생
+    if (member.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 삭제 여부와 관계없이 접수 중이거나 접수가 종료된 공고가 있는지 확인
+    boolean hasActivePosts = postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        List.of(PostStatus.RECRUITING, PostStatus.RECEPTION_CLOSED)
+    );
+
+    // 해당 공고가 있으면 진행 업무로 인한 탈퇴 제한 예외 발생
+    if (hasActivePosts) {
+      throw new BusinessException(MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS);
+    }
+
+    // TODO: (신청 기능 구현 후) 신청자로서 APPLIED, UNDER_REVIEW, APPROVED 상태의 신청 존재 여부 검사
+    // TODO: (인계 기능 구현 후) 회원과 관련된 미완료 인계 존재 여부를 검사
+    // TODO: 신청 및 인계 검사에 삭제된 공고의 진행 업무도 포함하고, 관련 업무 생성 시 동일 회원 잠금 규칙 적용
+
+    // UTC 기준 현재 시각으로 회원의 삭제 시각과 탈퇴 상태를 반영
+    member.withdraw(LocalDateTime.now(ZoneOffset.UTC));
+
+    // 저장된 Refresh Token이 있으면 삭제
+    refreshTokenRepository.findByMember_MemberId(memberId)
+        .ifPresent(refreshTokenRepository::delete);
   }
 }

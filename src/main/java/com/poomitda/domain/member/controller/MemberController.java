@@ -91,4 +91,12 @@ public class MemberController {
         memberService.getPublicProfile(memberId)
     );
   }
+
+  @DeleteMapping("/me")
+  public SuccessResponse<Void> withdraw(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal
+  ) {
+    memberService.withdraw(memberPrincipal.memberId());
+    return SuccessResponse.of("회원 탈퇴가 완료되었습니다.");
+  }
 }
