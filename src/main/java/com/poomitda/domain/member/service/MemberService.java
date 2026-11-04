@@ -10,7 +10,6 @@ import com.poomitda.domain.post.entity.constant.PostStatus;
 import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
-import java.math.*;
 import java.time.*;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -119,19 +118,6 @@ public class MemberService {
             () -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND)
         );
 
-    // 회원의 평균 평점 계산
-    Double averageRating = null;
-
-    if (member.getReviewCount() > 0) {
-      averageRating = BigDecimal.valueOf(member.getRatingSum())
-          .divide(
-              BigDecimal.valueOf(member.getReviewCount()),
-              1,
-              RoundingMode.HALF_UP
-          )
-          .doubleValue();
-    }
-
     // Member 정보를 Response DTO로 변환 후 반환
     return new MemberResponseDto.MyInfoResponse(
         member.getMemberId(),
@@ -141,7 +127,7 @@ public class MemberService {
         member.getPreferredSpecies(),
         member.getRole(),
         member.getStatus(),
-        averageRating,
+        member.calculateAverageRating(),
         member.getReviewCount()
     );
   }
@@ -231,26 +217,13 @@ public class MemberService {
     // 해당 회원이 작성한 유효 공고 수 조회
     long postCount = postRepository.countByAuthor_MemberIdAndDeletedAtIsNull(memberId);
 
-    // 회원의 평점 합계와 후기 수로 평균 평점 계산 (후기가 없으면 null)
-    Double averageRating = null;
-
-    if (member.getReviewCount() > 0) {
-      averageRating = BigDecimal.valueOf(member.getRatingSum())
-          .divide(
-              BigDecimal.valueOf(member.getReviewCount()),
-              1,
-              RoundingMode.HALF_UP
-          )
-          .doubleValue();
-    }
-
     // 공개할 필드만 DTO에 담아 반환
     return new MemberResponseDto.PublicProfileResponse(
         member.getMemberId(),
         member.getNickname(),
         member.getRole(),
         postCount,
-        averageRating,
+        member.calculateAverageRating(),
         member.getReviewCount()
     );
   }

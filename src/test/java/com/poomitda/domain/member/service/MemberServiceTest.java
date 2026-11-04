@@ -384,15 +384,14 @@ class MemberServiceTest {
     // given
     Long memberId = 1L;
 
-    Member member = mock(Member.class);
-    when(member.getMemberId()).thenReturn(memberId);
-    when(member.getEmail()).thenReturn("member@example.com");
-    when(member.getNickname()).thenReturn("품잇다");
-    when(member.getPreferredRegion()).thenReturn(Region.BUSAN);
-    when(member.getPreferredSpecies()).thenReturn(Species.CAT);
-    when(member.getRole()).thenReturn(MemberRole.ROLE_USER);
-    when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
-    when(member.getReviewCount()).thenReturn(0);
+    Member member = new Member(
+        "member@example.com",
+        "encodedPassword",
+        "품잇다",
+        Region.BUSAN,
+        Species.CAT
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
 
     when(memberRepository.findById(memberId))
         .thenReturn(Optional.of(member));
@@ -422,9 +421,16 @@ class MemberServiceTest {
     // given
     Long memberId = 1L;
 
-    Member member = mock(Member.class);
-    when(member.getRatingSum()).thenReturn(17L);
-    when(member.getReviewCount()).thenReturn(4);
+    Member member = new Member(
+        "member@example.com",
+        "encodedPassword",
+        "품잇다",
+        null,
+        null
+    );
+    ReflectionTestUtils.setField(member, "memberId", memberId);
+    ReflectionTestUtils.setField(member, "ratingSum", 17L);
+    ReflectionTestUtils.setField(member, "reviewCount", 4);
 
     when(memberRepository.findById(memberId))
         .thenReturn(Optional.of(member));

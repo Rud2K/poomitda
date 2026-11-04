@@ -4,6 +4,7 @@ import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.entity.BaseDeletedTimeEntity;
 import jakarta.persistence.*;
+import java.math.*;
 import java.time.LocalDateTime;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -95,6 +96,22 @@ public class Member extends BaseDeletedTimeEntity {
 
   public void changePreferredSpecies(Species preferredSpecies) {
     this.preferredSpecies = preferredSpecies;
+  }
+
+  public Double calculateAverageRating() {
+    Double averageRating = null;
+
+    if (this.reviewCount > 0) {
+      averageRating = BigDecimal.valueOf(this.ratingSum)
+          .divide(
+              BigDecimal.valueOf(this.reviewCount),
+              1,
+              RoundingMode.HALF_UP
+          )
+          .doubleValue();
+    }
+
+    return averageRating;
   }
 
   public void withdraw(LocalDateTime deletedAt) {
