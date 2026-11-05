@@ -1,12 +1,15 @@
 package com.poomitda.domain.post.service;
 
+import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.domain.post.dto.*;
 import com.poomitda.domain.post.dto.PostRequestDto.PostImageRequest;
+import com.poomitda.domain.post.dto.PostResponseDto.PostWriterResponse;
 import com.poomitda.domain.post.entity.*;
-import com.poomitda.domain.post.entity.constant.ImageUploadStatus;
+import com.poomitda.domain.post.entity.constant.*;
+import com.poomitda.domain.post.exception.PostErrorCode;
 import com.poomitda.domain.post.repository.*;
 import com.poomitda.domain.post.validation.PostCreateValidator;
 import com.poomitda.global.exception.CommonErrorCode;
@@ -26,6 +29,8 @@ public class PostService {
   private final PostRepository postRepository;
   private final PostImageRepository postImageRepository;
   private final PostCreateValidator postCreateValidator;
+  private final BookmarkRepository bookmarkRepository;
+  private final ApplicationRepository applicationRepository;
 
   /**
    * 공고를 등록하고 검증된 업로드 이미지를 연결한다.
@@ -98,6 +103,111 @@ public class PostService {
 
     // 저장된 공고 ID를 포함한 응답 생성 후 반환
     return new PostResponseDto.CreatePostResponse(savedPost.getPostId());
+  }
+
+  /**
+   * 삭제되지 않은 공고의 상세 정보와 현재 회원의 이용 가능 정보를 조회한다.
+   *
+   * @param memberId 현재 로그인한 회원 ID
+   * @param postId 조회할 공고 ID
+   * @return 공고 상세 정보를 담은 {@link PostResponseDto.PostDetailResponse}
+   */
+  @Transactional(readOnly = true)
+  public PostResponseDto.PostDetailResponse getPostDetail(
+      Long memberId,
+      Long postId
+  ) {
+    // 삭제되지 않은 공고를 작성자 정보와 함께 조회
+    Post post = postRepository.findByPostIdAndDeletedAtIsNull(postId)
+        .orElseThrow(
+            () -> new BusinessException(PostErrorCode.POST_NOT_FOUND)
+        );
+
+    // 조회된 공고에서 작성자를 가져옴
+    Member author = post.getAuthor();
+
+    // 작성자의 회원 ID, 닉네임, 평균 평점, 후기 수를 작성자 응답 DTO에 담음
+    PostResponseDto.PostWriterResponse writerResponse = new PostWriterResponse(
+        author.getMemberId(),
+        author.getNickname(),
+        author.calculateAverageRating(),
+        author.getReviewCount()
+    );
+
+    // 현재 로그인 회원의 ID와 공고 작성자의 ID를 비교하여 본인 작성 여부 결정
+    boolean isWriter = memberId.equals(author.getMemberId());
+
+    // 현재 로그인 회원의 해당 공고 북마크 여부 확인
+    boolean isBookmarked = bookmarkRepository.existsByMember_MemberIdAndPost_PostId(memberId, postId);
+
+    // 공고 이미지를 표시 순서 오름차순으로 조회
+    List<PostImage> postImages = postImageRepository.findAllByPost_PostIdOrderByDisplayOrderAsc(postId);
+
+    // 순서를 유지하며 각 이미지를 이미지 응답 DTO로 변환
+    List<PostResponseDto.PostImageResponse> imageResponses = new ArrayList<>();
+    for (PostImage postImage : postImages) {
+      PostResponseDto.PostImageResponse imageResponse = new PostResponseDto.PostImageResponse(
+          postImage.getPostImageId(),
+          postImage.getImageUrl(),
+          postImage.isRepresentative(),
+          postImage.getDisplayOrder()
+      );
+      imageResponses.add(imageResponse);
+    }
+
+    // 현재 로그인 회원의 해당 공고 신청 이력을 상태와 관계없이 확인
+    boolean hasApplied = applicationRepository.existsByPost_PostIdAndApplicant_MemberId(postId, memberId);
+
+    // 신청 가능 여부를 판단할 현재 UTC 시각을 한 번 구함
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+    // 마감 시각이 없거나 현재 시각이 마감 시각보다 이전인지 확인
+    LocalDateTime recruitmentDeadline = post.getRecruitmentDeadline();
+    boolean isBeforeDeadline = recruitmentDeadline == null || now.isBefore(recruitmentDeadline);
+
+    // 다음 조건을 모두 만족하면 신청 가능으로 판단
+    // - 본인이 작성한 공고가 아님
+    // - 기존 신청 이력이 없음
+    // - 접수 마감 시각이 없거나 현재 시각이 마감 시각보다 이전임
+    // - 공고 상태가 RECRUITING
+    boolean canApply = !isWriter && !hasApplied && isBeforeDeadline && post.getStatus() == PostStatus.RECRUITING;
+
+    // 생성, 수정, 마감, 종료 시각을 UTC 기준에서 +09:00 응답 시각으로 변환
+    OffsetDateTime createdAt = toResponseDateTime(post.getCreatedAt());
+    OffsetDateTime updatedAt = toResponseDateTime(post.getUpdatedAt());
+
+    // 변환 직후 동일한 순간을 유지하고, null은 그대로 유지
+    OffsetDateTime recruitmentDeadlineResponse = toResponseDateTime(recruitmentDeadline);
+    OffsetDateTime closedAt = toResponseDateTime(post.getClosedAt());
+
+    // 모든 정보를 상세 응답 DTO에 담아 반환
+    return new PostResponseDto.PostDetailResponse(
+        post.getPostId(),
+        isWriter,
+        isBookmarked,
+        writerResponse,
+        post.getTitle(),
+        post.getContent(),
+        post.getNoticeType(),
+        post.getSpecies(),
+        post.getBreed(),
+        post.getEstimatedBirthDate(),
+        post.getGender(),
+        post.isNeutered(),
+        post.getFosterPeriod(),
+        post.getFoundLocation(),
+        post.getRegion(),
+        post.getDistrict(),
+        post.getStatus(),
+        post.getClosedReason(),
+        recruitmentDeadlineResponse,
+        post.getBookmarkCount(),
+        imageResponses,
+        createdAt,
+        updatedAt,
+        closedAt,
+        canApply
+    );
   }
 
   /**
@@ -182,5 +292,22 @@ public class PostService {
 
     // 동일한 순간의 UTC 시각으로 변환한 뒤 LocalDateTime으로 반환
     return recruitmentDeadline.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+  }
+
+  /**
+   * UTC 기준 저장 시각을 동일한 순간의 +09:00 응답 시각으로 변환한다.
+   *
+   * @param utcDateTime UTC 기준 저장 시각
+   * @return +09:00 오프셋의 {@link OffsetDateTime}, 입력이 null이면 null
+   */
+  private OffsetDateTime toResponseDateTime(LocalDateTime utcDateTime) {
+    // 마감 시각이나 종료 시각이 없는 경우 그대로 유지
+    if (utcDateTime == null) return null;
+
+    // 저장된 시각이 UTC 기준임을 명시
+    OffsetDateTime utcOffsetDateTime = utcDateTime.atOffset(ZoneOffset.UTC);
+
+    // 동일한 순간을 +09:00 시각으로 표현
+    return utcOffsetDateTime.withOffsetSameInstant(ZoneOffset.ofHours(9));
   }
 }

@@ -96,6 +96,12 @@ public class SecurityConfig {
                 "/api/posts"
             ).hasAuthority("ROLE_PROTECTOR")
 
+            // 공고 상세 조회는 일반 회원과 보호자만 허용
+            .requestMatchers(
+                HttpMethod.GET,
+                "/api/posts/{postId}"
+            ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
+
             // 위 규칙에 해당하지 않는 요청은 인증 필요
             .anyRequest().authenticated()
         );

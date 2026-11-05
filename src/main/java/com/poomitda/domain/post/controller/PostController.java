@@ -26,4 +26,15 @@ public class PostController {
         postService.createPost(memberPrincipal.memberId(), request)
     );
   }
+
+  @GetMapping("/{postId}")
+  public SuccessResponse<PostResponseDto.PostDetailResponse> getPostDetail(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("postId") Long postId
+  ) {
+    return SuccessResponse.of(
+        "공고 상세 조회 성공",
+        postService.getPostDetail(memberPrincipal.memberId(), postId)
+    );
+  }
 }

@@ -2,8 +2,8 @@ package com.poomitda.domain.post.repository;
 
 import com.poomitda.domain.post.entity.Post;
 import com.poomitda.domain.post.entity.constant.PostStatus;
-import java.util.Collection;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.*;
+import org.springframework.data.jpa.repository.*;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
 
@@ -26,4 +26,13 @@ public interface PostRepository extends JpaRepository<Post, Long> {
       Long memberId,
       Collection<PostStatus> statuses
   );
+
+  /**
+   * 삭제되지 않은 공고를 작성자 정보와 함께 조회한다.
+   *
+   * @param postId 조회할 공고 ID
+   * @return 공고가 존재하면 {@link Post}를 담은 {@link Optional}, 없거나 삭제되었으면 빈 {@link Optional}
+   */
+  @EntityGraph(attributePaths = "author")
+  Optional<Post> findByPostIdAndDeletedAtIsNull(Long postId);
 }
