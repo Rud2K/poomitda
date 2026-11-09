@@ -18,8 +18,10 @@ import com.poomitda.domain.post.validation.PostCreateValidator;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
+import com.poomitda.global.validation.DistrictCatalog;
 import java.time.*;
 import java.util.*;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
@@ -45,7 +47,7 @@ class PostServiceTest {
       imageUploadRepository,
       postRepository,
       postImageRepository,
-      new PostCreateValidator(),
+      new PostCreateValidator(new DistrictCatalog()),
       bookmarkRepository,
       applicationRepository
   );
@@ -856,6 +858,73 @@ class PostServiceTest {
     verify(applicationRepository).existsByPost_PostIdAndApplicant_MemberId(postId, memberId);
   }
 
+  @ParameterizedTest
+  @MethodSource("validRegionCases")
+  @DisplayName("유효한 지역 조합 또는 시/군/구 생략 -> 정리된 지역 정보 저장")
+  void createsPostWithValidRegion(
+      Region region,
+      String district,
+      String expectedDistrict
+  ) {
+    // given
+    CreatePostRequest request = createRequestWithRegion(region, district);
+
+    Member author = prepareAuthor(
+        MemberStatus.ACTIVE,
+        MemberRole.ROLE_PROTECTOR
+    );
+    preparePendingUpload(author);
+    prepareSavedPost();
+
+    // when
+    CreatePostResponse response = postService.createPost(MEMBER_ID, request);
+
+    // then
+    assertEquals(POST_ID, response.postId());
+
+    ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
+    verify(postRepository).save(captor.capture());
+
+    Post createdPost = captor.getValue();
+
+    assertAll(
+        () -> assertEquals(region, createdPost.getRegion()),
+        () -> assertEquals(expectedDistrict, createdPost.getDistrict())
+    );
+  }
+
+  @ParameterizedTest
+  @MethodSource("invalidRegionCases")
+  @DisplayName("지역 누락 또는 잘못된 시/군/구 조합 -> 입력값 오류 및 DB 접근 중단")
+  void rejectsInvalidRegionBeforeDatabaseAccess(
+      Region region,
+      String district
+  ) {
+    // given
+    CreatePostRequest request = createRequestWithRegion(region, district);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> postService.createPost(MEMBER_ID, request)
+    );
+
+    // then
+    assertEquals(
+        CommonErrorCode.INVALID_INPUT_VALUE,
+        exception.getErrorCode()
+    );
+
+    verifyNoInteractions(
+        memberRepository,
+        imageUploadRepository,
+        postRepository,
+        postImageRepository,
+        bookmarkRepository,
+        applicationRepository
+    );
+  }
+
   private Member prepareAuthor(MemberStatus status, MemberRole role) {
     Member member = mock(Member.class);
 
@@ -928,5 +997,53 @@ class PostServiceTest {
     // then
     assertEquals(expectedCode, exception.getErrorCode());
     verifyNoInteractions(postRepository, postImageRepository);
+  }
+
+  private static Stream<Arguments> validRegionCases() {
+    return Stream.of(
+        Arguments.of(Region.SEOUL, "강남구", "강남구"),
+        Arguments.of(Region.GYEONGGI, "  구리시  ", "구리시"),
+        Arguments.of(Region.GYEONGGI, null, null),
+        Arguments.of(Region.SEJONG, null, null),
+        Arguments.of(Region.JEONNAM_GWANGJU, "광산구", "광산구"),
+        Arguments.of(Region.JEONNAM_GWANGJU, "목포시", "목포시"),
+        Arguments.of(Region.INCHEON, "서해구", "서해구")
+    );
+  }
+
+  private static Stream<Arguments> invalidRegionCases() {
+    return Stream.of(
+        Arguments.of(null, null),
+        Arguments.of(null, "강남구"),
+        Arguments.of(Region.SEOUL, ""),
+        Arguments.of(Region.SEOUL, "   "),
+        Arguments.of(Region.SEOUL, "구리시"),
+        Arguments.of(Region.GYEONGGI, "존재하지않는시"),
+        Arguments.of(Region.SEJONG, "세종시"),
+        Arguments.of(Region.INCHEON, "서구")
+    );
+  }
+
+  private CreatePostRequest createRequestWithRegion(
+      Region region,
+      String district
+  ) {
+    CreatePostRequest base = validRequest();
+    return new CreatePostRequest(
+        base.title(),
+        base.content(),
+        base.noticeType(),
+        base.species(),
+        base.breed(),
+        base.estimatedBirthDate(),
+        base.gender(),
+        base.isNeutered(),
+        base.fosterPeriod(),
+        base.foundLocation(),
+        region,
+        district,
+        base.recruitmentDeadline(),
+        base.images()
+    );
   }
 }
