@@ -7,6 +7,7 @@ import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
+import com.poomitda.global.validation.DistrictCatalog;
 import java.util.List;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,7 +15,7 @@ import org.junit.jupiter.params.provider.*;
 
 class PostCreateValidatorTest {
 
-  private final PostCreateValidator validator = new PostCreateValidator();
+  private final PostCreateValidator validator = new PostCreateValidator(new DistrictCatalog());
 
   private static final String IMAGE_URL_1 = "https://example.com/posts/image1.png";
 
