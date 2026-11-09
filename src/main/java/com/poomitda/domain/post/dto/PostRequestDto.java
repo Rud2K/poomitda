@@ -1,5 +1,6 @@
 package com.poomitda.domain.post.dto;
 
+import com.poomitda.domain.post.dto.constant.*;
 import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.global.constant.*;
 import jakarta.validation.Valid;
@@ -59,7 +60,11 @@ public final class PostRequestDto {
           @Valid
           PostImageRequest
       > images
-  ) {}
+  ) {
+      public CreatePostRequest {
+          if (district != null) district = district.strip();
+      }
+  }
 
   public record PostImageRequest(
       @NotBlank(message = "이미지 URL은 필수 입력 항목입니다.")
@@ -73,4 +78,37 @@ public final class PostRequestDto {
       @PositiveOrZero(message = "이미지 표시 순서는 0 이상이어야 합니다.")
       Integer displayOrder
   ) {}
+  public record PostListRequest(
+      NoticeType noticeType,
+      Species species,
+      Gender gender,
+      Region region,
+
+      @Size(max = 50, message = "시/군/구는 50자 이하여야 합니다.")
+      String district,
+
+      PostStatusFilter status,
+      PostSort sort,
+      String cursor,
+
+      @Min(value = 1, message = "조회 개수는 1 이상이어야 합니다.")
+      @Max(value = 50, message = "조회 개수는 50 이하여야 합니다.")
+      Integer size,
+
+      @PositiveOrZero(message = "최소 나이는 0개월 이상이어야 합니다.")
+      Integer minAgeMonths,
+
+      @PositiveOrZero(message = "최대 나이는 0개월 이상이어야 합니다.")
+      Integer maxAgeMonths,
+
+      String keyword
+  ) {
+      public PostListRequest {
+          if (status == null) status = PostStatusFilter.RECRUITING;
+          if (sort == null) sort = PostSort.LATEST;
+          if (size == null) size = 10;
+          if (keyword != null) keyword = keyword.strip();
+          if (district != null) district = district.strip();
+      }
+  }
 }
