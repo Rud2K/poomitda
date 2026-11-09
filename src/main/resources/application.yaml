@@ -24,3 +24,9 @@ aws:
   s3:
     region: ${AWS_REGION:ap-northeast-2}
     bucket: ${AWS_S3_BUCKET:poomitda-dev-images}
+
+post:
+  deadline:
+    enabled: false
+    initial-delay-ms: 60000
+    fixed-delay-ms: 60000
