@@ -123,4 +123,30 @@ public class Post extends BaseDeletedTimeEntity {
     this.closedAt = null;
     this.closedReason = null;
   }
+
+  public boolean isRecruitmentDeadlineReached(LocalDateTime now) {
+    if (this.recruitmentDeadline == null) return false;
+    return !now.isBefore(this.recruitmentDeadline);
+  }
+
+  public void closeReception() {
+    if (this.status != PostStatus.RECRUITING) return;
+    this.status = PostStatus.RECEPTION_CLOSED;
+  }
+
+  public void closeAfterDeadline(
+      PostClosedReason reason,
+      LocalDateTime now
+  ) {
+    if (this.status == PostStatus.CLOSED) return;
+    if (reason != PostClosedReason.NO_APPLICANTS && reason != PostClosedReason.NO_SELECTION) {
+      throw new IllegalArgumentException(
+          "마감에 따른 종료 사유는 NO_APPLICANTS 또는 NO_SELECTION이어야 합니다."
+      );
+    }
+    if (!isRecruitmentDeadlineReached(now)) return;
+    this.status = PostStatus.CLOSED;
+    this.closedReason = reason;
+    this.closedAt = now;
+  }
 }
