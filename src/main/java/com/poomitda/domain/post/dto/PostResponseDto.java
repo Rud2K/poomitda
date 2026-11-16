@@ -59,4 +59,29 @@ public final class PostResponseDto {
       OffsetDateTime closedAt,
       boolean canApply
   ) {}
+
+  public record PostListItemResponse(
+      Long postId,
+      String title,
+      NoticeType noticeType,
+      Species species,
+      String breed,
+      LocalDate estimatedBirthDate,
+      Gender gender,
+      Region region,
+      String district,
+      String representativeImageUrl,
+      PostStatus status,
+      OffsetDateTime recruitmentDeadline,
+      int bookmarkCount,
+      OffsetDateTime createdAt,
+      PostClosedReason closedReason,
+      OffsetDateTime closedAt
+  ) {}
+
+  public record PostListResponse(
+      List<PostListItemResponse> posts,
+      String nextCursor,
+      boolean hasNext
+  ) {}
 }

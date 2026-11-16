@@ -4,13 +4,15 @@ import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.cursor.*;
 import com.poomitda.domain.post.dto.*;
-import com.poomitda.domain.post.dto.PostRequestDto.PostImageRequest;
-import com.poomitda.domain.post.dto.PostResponseDto.PostWriterResponse;
+import com.poomitda.domain.post.dto.PostRequestDto.*;
+import com.poomitda.domain.post.dto.PostResponseDto.*;
 import com.poomitda.domain.post.entity.*;
 import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.domain.post.exception.PostErrorCode;
 import com.poomitda.domain.post.repository.*;
+import com.poomitda.domain.post.repository.PostImageRepository.RepresentativeImageView;
 import com.poomitda.domain.post.validation.PostCreateValidator;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
@@ -31,6 +33,8 @@ public class PostService {
   private final PostCreateValidator postCreateValidator;
   private final BookmarkRepository bookmarkRepository;
   private final ApplicationRepository applicationRepository;
+  private final PostCursorFactory postCursorFactory;
+  private final PostCursorCodec postCursorCodec;
 
   /**
    * 공고를 등록하고 검증된 업로드 이미지를 연결한다.
@@ -211,6 +215,34 @@ public class PostService {
   }
 
   /**
+   * 마감 상태 갱신 이후 공고 목록과 다음 페이지 정보를 조회한다.
+   *
+   * @param request 검증된 목록 검색 요청
+   * @param cursor 검증된 커서. 첫 페이지에서는 null
+   * @param referenceDate 첫 페이지부터 유지하는 나이 계산 기준일
+   * @param now 현재 요청의 마감 여부를 판단할 UTC 기준 시각
+   * @return 공고 목록과 다음 페이지 정보를 담은 {@link PostListResponse}
+   */
+  @Transactional(readOnly = true)
+  public PostResponseDto.PostListResponse getPostList(
+      PostListRequest request,
+      PostCursor cursor,
+      LocalDate referenceDate,
+      LocalDateTime now
+  ) {
+    // 검색 조건에 맞는 공고 목록 조회
+    List<Post> fetchedPosts = postRepository.findPosts(
+        request,
+        cursor,
+        referenceDate,
+        now
+    );
+
+    // 조회 결과를 목록 응답으로 변환해 반환
+    return toPostListResponse(fetchedPosts, request, referenceDate);
+  }
+
+  /**
    * 회원을 잠금 조회하고 공고 등록이 가능한 상태와 권한인지 확인한다.
    *
    * @param memberId 공고를 등록할 회원 ID
@@ -309,5 +341,152 @@ public class PostService {
 
     // 동일한 순간을 +09:00 시각으로 표현
     return utcOffsetDateTime.withOffsetSameInstant(ZoneOffset.ofHours(9));
+  }
+
+  /**
+   * 반환할 공고들의 대표 이미지 URL을 한 번에 조회한다.
+   *
+   * @param posts 실제 응답에 포함할 공고 목록
+   * @return 공고 ID를 키로 하고 대표 이미지 URL을 값으로 하는 {@link Map}
+   * @throws IllegalStateException 한 공고에 대표 이미지가 여러 개 존재하는 경우
+   */
+  private Map<Long, String> getRepresentativeImageUrls(List<Post> posts) {
+    // posts가 비어 있으면 Map.of() 반환
+    if (posts.isEmpty()) {
+      return Map.of();
+    }
+
+    // 공고 ID를 담을 목록 생성
+    List<Long> postIds = new ArrayList<>();
+
+    // posts를 순회하며 각 공고의 getPostId()를 postIds에 추가
+    for (Post post : posts) {
+      postIds.add(post.getPostId());
+    }
+
+    // 대표 이미지를 한 번에 조회
+    List<RepresentativeImageView> images = postImageRepository.findRepresentativeImagesByPostIds(postIds);
+
+    // 결과를 담을 Map 생성
+    Map<Long, String> imageUrls = new HashMap<>();
+
+    // images 순회
+    for (RepresentativeImageView image : images) {
+      Long postId = image.getPostId();
+
+      if (imageUrls.containsKey(postId)) {
+        throw new IllegalStateException(
+            "공고에 대표 이미지가 여러 개 존재합니다. postId=" + postId
+        );
+      }
+
+      imageUrls.put(postId, image.getImageUrl());
+    }
+
+    // imageUrls 반환
+    return imageUrls;
+  }
+
+  /**
+   * 공고와 대표 이미지 URL을 목록 항목 응답으로 변환한다.
+   * UTC 저장 시각은 동일한 순간의 +09:00 시각으로 변환한다.
+   *
+   * @param post 목록에 포함할 공고
+   * @param representativeImageUrl 대표 이미지 URL. 이미지가 없으면 null
+   * @return 공고 한 건의 목록 응답인 {@link PostListItemResponse}
+   */
+  private PostResponseDto.PostListItemResponse toPostListItemResponse(
+      Post post,
+      String representativeImageUrl
+  ) {
+    // 접수 마감 시각을 응답 시각으로 변환
+    OffsetDateTime recruitmentDeadline = toResponseDateTime(post.getRecruitmentDeadline());
+
+    // 생성 시각을 응답 시각으로 변환
+    OffsetDateTime createdAt = toResponseDateTime(post.getCreatedAt());
+
+    // 종료 시각을 응답 시각으로 변환
+    OffsetDateTime closedAt = toResponseDateTime(post.getClosedAt());
+
+    // PostListItemResponse를 생성해 반환
+    return new PostResponseDto.PostListItemResponse(
+        post.getPostId(),
+        post.getTitle(),
+        post.getNoticeType(),
+        post.getSpecies(),
+        post.getBreed(),
+        post.getEstimatedBirthDate(),
+        post.getGender(),
+        post.getRegion(),
+        post.getDistrict(),
+        representativeImageUrl,
+        post.getStatus(),
+        recruitmentDeadline,
+        post.getBookmarkCount(),
+        createdAt,
+        post.getClosedReason(),
+        closedAt
+    );
+  }
+
+  /**
+   * 조회 결과를 실제 반환 목록과 다음 페이지 정보로 변환한다.
+   *
+   * @param fetchedPosts 정렬된 공고 조회 결과. 최대 size + 1개
+   * @param request 검증된 목록 조회 요청
+   * @param referenceDate 첫 페이지부터 유지하는 나이 계산 기준일
+   * @return 공고 목록과 다음 페이지 정보를 담은 {@link PostListResponse}
+   */
+  private PostResponseDto.PostListResponse toPostListResponse(
+      List<Post> fetchedPosts,
+      PostListRequest request,
+      LocalDate referenceDate
+  ) {
+    // 요청한 조회 개수를 저장
+    int size = request.size();
+
+    // 다음 페이지 존재 여부 판단
+    boolean hasNext = false;
+
+    if (fetchedPosts.size() > size) {
+      hasNext = true;
+    }
+
+    // 실제 반환할 목록을 별도로 복사
+    List<Post> posts;
+
+    if (hasNext) {
+      posts = new ArrayList<>(fetchedPosts.subList(0, size));
+    } else {
+      posts = new ArrayList<>(fetchedPosts);
+    }
+
+    // 실제 반환 목록의 대표 이미지 조회
+    Map<Long, String> imageUrls = getRepresentativeImageUrls(posts);
+
+    // 응답 항목 목록 생성
+    List<PostListItemResponse> responses = new ArrayList<>();
+
+    // posts를 순서대로 순회하며 응답 항목 추가
+    for (Post post : posts) {
+      responses.add(toPostListItemResponse(post, imageUrls.get(post.getPostId())));
+    }
+
+    // 다음 커서를 null로 초기화
+    String nextCursor = null;
+
+    // hasNext가 true일 때만 다음 커서 생성
+    if (hasNext) {
+      Post lastPost = posts.getLast();
+      PostCursor nextPostCursor = postCursorFactory.create(lastPost, request, referenceDate);
+      nextCursor = postCursorCodec.encode(nextPostCursor);
+    }
+
+    // PostListResponse를 생성해 반환
+    return new PostResponseDto.PostListResponse(
+        responses,
+        nextCursor,
+        hasNext
+    );
   }
 }
