@@ -7,13 +7,16 @@ import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.repository.MemberRepository;
+import com.poomitda.domain.post.cursor.*;
 import com.poomitda.domain.post.dto.PostRequestDto.*;
 import com.poomitda.domain.post.dto.PostResponseDto;
-import com.poomitda.domain.post.dto.PostResponseDto.CreatePostResponse;
+import com.poomitda.domain.post.dto.PostResponseDto.*;
+import com.poomitda.domain.post.dto.constant.PostStatusFilter;
 import com.poomitda.domain.post.entity.*;
 import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.domain.post.exception.PostErrorCode;
 import com.poomitda.domain.post.repository.*;
+import com.poomitda.domain.post.repository.PostImageRepository.RepresentativeImageView;
 import com.poomitda.domain.post.validation.PostCreateValidator;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.CommonErrorCode;
@@ -42,6 +45,10 @@ class PostServiceTest {
 
   private final ApplicationRepository applicationRepository = mock(ApplicationRepository.class);
 
+  private final PostCursorFactory postCursorFactory = mock(PostCursorFactory.class);
+
+  private final PostCursorCodec postCursorCodec = mock(PostCursorCodec.class);
+
   private final PostService postService = new PostService(
       memberRepository,
       imageUploadRepository,
@@ -49,7 +56,9 @@ class PostServiceTest {
       postImageRepository,
       new PostCreateValidator(new DistrictCatalog()),
       bookmarkRepository,
-      applicationRepository
+      applicationRepository,
+      postCursorFactory,
+      postCursorCodec
   );
 
   private static final Long MEMBER_ID = 1L;
@@ -925,6 +934,325 @@ class PostServiceTest {
     );
   }
 
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 2})
+  @DisplayName("조회 결과가 요청 개수 이하 -> 전체 반환 및 다음 커서 없음")
+  void returnsLastPageWithoutCursor(int postCount) {
+    // given
+    PostListRequest request = createListRequest(2);
+    LocalDate referenceDate = LocalDate.of(2026, 11, 16);
+    LocalDateTime now = referenceDate.atTime(10, 0);
+
+    List<Post> fetchedPosts = new ArrayList<>();
+    List<Long> expectedIds = new ArrayList<>();
+
+    for (int i = 0; i < postCount; i++) {
+      Long postId = 100L - i;
+      fetchedPosts.add(createListPost(postId));
+      expectedIds.add(postId);
+    }
+
+    when(postRepository.findPosts(
+        request, null, referenceDate, now
+    )).thenReturn(fetchedPosts);
+
+    if (postCount > 0) {
+      when(postImageRepository.findRepresentativeImagesByPostIds(
+          expectedIds
+      )).thenReturn(List.of());
+    }
+
+    // when
+    PostListResponse response = postService.getPostList(
+        request, null, referenceDate, now
+    );
+
+    // then
+    assertEquals(
+        expectedIds,
+        response.posts().stream().map(PostListItemResponse::postId).toList()
+    );
+    assertFalse(response.hasNext());
+    assertNull(response.nextCursor());
+
+    assertEquals(postCount, fetchedPosts.size());
+
+    verify(postRepository).findPosts(
+        request, null, referenceDate, now
+    );
+
+    if (postCount == 0) {
+      verifyNoInteractions(postImageRepository);
+    } else {
+      verify(postImageRepository).findRepresentativeImagesByPostIds(expectedIds);
+      verifyNoMoreInteractions(postImageRepository);
+
+      assertTrue(response.posts().stream()
+          .allMatch(item -> item.representativeImageUrl() == null));
+    }
+
+    verifyNoInteractions(postCursorFactory, postCursorCodec);
+  }
+
+  @Test
+  @DisplayName("조회 결과가 요청 개수 초과 -> 여분 제외 및 마지막 반환 공고로 커서 생성")
+  void createsCursorFromLastReturnedPost() {
+    // given
+    PostListRequest request = createListRequest(2);
+    LocalDate referenceDate = LocalDate.of(2026, 11, 16);
+    LocalDateTime now = referenceDate.atTime(10, 0);
+
+    Post firstPost = createListPost(100L);
+    Post secondPost = createListPost(99L);
+    Post extraPost = createListPost(98L);
+
+    List<Post> fetchedPosts = new ArrayList<>(
+        List.of(firstPost, secondPost, extraPost)
+    );
+
+    PostCursor nextPostCursor = mock(PostCursor.class);
+
+    when(postRepository.findPosts(
+        request, null, referenceDate, now
+    )).thenReturn(fetchedPosts);
+
+    when(postImageRepository.findRepresentativeImagesByPostIds(
+        List.of(100L, 99L)
+    )).thenReturn(List.of());
+
+    when(postCursorFactory.create(
+        secondPost, request, referenceDate
+    )).thenReturn(nextPostCursor);
+
+    when(postCursorCodec.encode(nextPostCursor))
+        .thenReturn("encoded-next-cursor");
+
+    // when
+    PostListResponse response = postService.getPostList(
+        request, null, referenceDate, now
+    );
+
+    // then
+    assertEquals(
+        List.of(100L, 99L),
+        response.posts().stream().map(PostListItemResponse::postId).toList()
+    );
+    assertTrue(response.hasNext());
+    assertEquals("encoded-next-cursor", response.nextCursor());
+
+    assertEquals(
+        List.of(firstPost, secondPost, extraPost),
+        fetchedPosts
+    );
+
+    verify(postRepository).findPosts(
+        request, null, referenceDate, now
+    );
+
+    verify(postImageRepository).findRepresentativeImagesByPostIds(
+        List.of(100L, 99L)
+    );
+    verifyNoMoreInteractions(postImageRepository);
+
+    verify(postCursorFactory).create(
+        secondPost, request, referenceDate
+    );
+    verify(postCursorCodec).encode(nextPostCursor);
+    verifyNoMoreInteractions(postCursorFactory, postCursorCodec);
+  }
+
+  @Test
+  @DisplayName("대표 이미지 조회 순서가 다름 -> 공고 ID로 연결하고 목록 순서 유지")
+  void mapsRepresentativeImagesByPostId() {
+    // given
+    PostListRequest request = createListRequest(3);
+    LocalDate referenceDate = LocalDate.of(2026, 11, 16);
+    LocalDateTime now = referenceDate.atTime(10, 0);
+
+    Post firstPost = createListPost(100L);
+    Post secondPost = createListPost(99L);
+    Post thirdPost = createListPost(98L);
+
+    when(postRepository.findPosts(
+        request, null, referenceDate, now
+    )).thenReturn(List.of(firstPost, secondPost, thirdPost));
+
+    when(postImageRepository.findRepresentativeImagesByPostIds(
+        List.of(100L, 99L, 98L)
+    )).thenReturn(List.of(
+        representativeImage(99L, IMAGE_URL_2),
+        representativeImage(100L, IMAGE_URL_1)
+    ));
+
+    // when
+    PostListResponse response = postService.getPostList(
+        request, null, referenceDate, now
+    );
+
+    // then
+    assertEquals(
+        List.of(100L, 99L, 98L),
+        response.posts().stream().map(PostListItemResponse::postId).toList()
+    );
+
+    assertEquals(
+        IMAGE_URL_1,
+        response.posts().get(0).representativeImageUrl()
+    );
+    assertEquals(
+        IMAGE_URL_2,
+        response.posts().get(1).representativeImageUrl()
+    );
+    assertNull(response.posts().get(2).representativeImageUrl());
+
+    assertFalse(response.hasNext());
+    assertNull(response.nextCursor());
+
+    verify(postImageRepository).findRepresentativeImagesByPostIds(
+        List.of(100L, 99L, 98L)
+    );
+    verifyNoMoreInteractions(postImageRepository);
+    verifyNoInteractions(postCursorFactory, postCursorCodec);
+  }
+
+  @Test
+  @DisplayName("한 공고에 대표 이미지 중복 -> 예외 발생 및 커서 생성 중단")
+  void rejectsDuplicateRepresentativeImages() {
+    // given
+    PostListRequest request = createListRequest(1);
+    LocalDate referenceDate = LocalDate.of(2026, 11, 16);
+    LocalDateTime now = referenceDate.atTime(10, 0);
+
+    Post post = createListPost(100L);
+    Post extraPost = createListPost(99L);
+
+    when(postRepository.findPosts(
+        request, null, referenceDate, now
+    )).thenReturn(List.of(post, extraPost));
+
+    when(postImageRepository.findRepresentativeImagesByPostIds(
+        List.of(100L)
+    )).thenReturn(List.of(
+        representativeImage(100L, IMAGE_URL_1),
+        representativeImage(100L, IMAGE_URL_2)
+    ));
+
+    // when
+    IllegalStateException exception = assertThrows(
+        IllegalStateException.class,
+        () -> postService.getPostList(
+            request, null, referenceDate, now
+        )
+    );
+
+    // then
+    assertEquals(
+        "공고에 대표 이미지가 여러 개 존재합니다. postId=100",
+        exception.getMessage()
+    );
+
+    verify(postImageRepository).findRepresentativeImagesByPostIds(
+        List.of(100L)
+    );
+    verifyNoMoreInteractions(postImageRepository);
+    verifyNoInteractions(postCursorFactory, postCursorCodec);
+  }
+
+  @Test
+  @DisplayName("종료된 공고 조회 -> 목록 필드와 종료 정보를 유지하고 시각을 +09:00으로 변환")
+  void mapsClosedPostFieldsAndResponseTimes() {
+    // given
+    PostListRequest request = new PostListRequest(
+        null,
+        null,
+        null,
+        null,
+        null,
+        PostStatusFilter.ALL,
+        null,
+        null,
+        10,
+        null,
+        null,
+        null
+    );
+
+    LocalDate referenceDate = LocalDate.of(2026, 11, 16);
+    LocalDateTime now = referenceDate.atTime(10, 0);
+
+    Post post = createListPost(100L);
+    LocalDateTime deadlineUtc = LocalDateTime.of(2026, 11, 15, 18, 0);
+    LocalDateTime closedAtUtc = LocalDateTime.of(2026, 11, 16, 1, 30);
+
+    ReflectionTestUtils.setField(
+        post, "recruitmentDeadline", deadlineUtc
+    );
+    ReflectionTestUtils.setField(post, "bookmarkCount", 7);
+
+    post.closeAfterDeadline(
+        PostClosedReason.NO_APPLICANTS,
+        closedAtUtc
+    );
+
+    when(postRepository.findPosts(
+        request, null, referenceDate, now
+    )).thenReturn(List.of(post));
+
+    when(postImageRepository.findRepresentativeImagesByPostIds(
+        List.of(100L)
+    )).thenReturn(List.of(
+        representativeImage(100L, IMAGE_URL_1)
+    ));
+
+    // when
+    PostListResponse response = postService.getPostList(
+        request, null, referenceDate, now
+    );
+
+    // then
+    assertEquals(1, response.posts().size());
+    PostListItemResponse item = response.posts().getFirst();
+
+    assertAll(
+        () -> assertEquals(Long.valueOf(100L), item.postId()),
+        () -> assertEquals("공고 100", item.title()),
+        () -> assertEquals(NoticeType.ADOPTION, item.noticeType()),
+        () -> assertEquals(Species.CAT, item.species()),
+        () -> assertEquals("코리안 숏헤어", item.breed()),
+        () -> assertEquals(
+            LocalDate.of(2026, 5, 1), item.estimatedBirthDate()
+        ),
+        () -> assertEquals(Gender.FEMALE, item.gender()),
+        () -> assertEquals(Region.GYEONGGI, item.region()),
+        () -> assertEquals("구리시", item.district()),
+        () -> assertEquals(IMAGE_URL_1, item.representativeImageUrl()),
+        () -> assertEquals(PostStatus.CLOSED, item.status()),
+        () -> assertEquals(7, item.bookmarkCount()),
+        () -> assertEquals(
+            PostClosedReason.NO_APPLICANTS, item.closedReason()
+        ),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-01T12:00:00+09:00"),
+            item.createdAt()
+        ),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-16T03:00:00+09:00"),
+            item.recruitmentDeadline()
+        ),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-16T10:30:00+09:00"),
+            item.closedAt()
+        )
+    );
+
+    assertEquals(deadlineUtc, post.getRecruitmentDeadline());
+    assertEquals(closedAtUtc, post.getClosedAt());
+
+    assertFalse(response.hasNext());
+    assertNull(response.nextCursor());
+    verifyNoInteractions(postCursorFactory, postCursorCodec);
+  }
+
   private Member prepareAuthor(MemberStatus status, MemberRole role) {
     Member member = mock(Member.class);
 
@@ -1045,5 +1373,75 @@ class PostServiceTest {
         base.recruitmentDeadline(),
         base.images()
     );
+  }
+
+  private PostListRequest createListRequest(int size) {
+    return new PostListRequest(
+        null, // noticeType
+        null, // species
+        null, // gender
+        null, // region
+        null, // district
+        null, // status: 기본값 적용
+        null, // sort: 기본값 적용
+        null, // cursor
+        size,
+        null, // minAgeMonths
+        null, // maxAgeMonths
+        null  // keyword
+    );
+  }
+
+  private Post createListPost(Long postId) {
+    Member author = new Member(
+        "list-author@example.com",
+        "encodedPassword",
+        "목록테스트보호소",
+        null,
+        null
+    );
+
+    Post post = new Post(
+        author,
+        "공고 " + postId,
+        "공고 목록 조회 테스트입니다.",
+        NoticeType.ADOPTION,
+        Species.CAT,
+        "코리안 숏헤어",
+        LocalDate.of(2026, 5, 1),
+        Gender.FEMALE,
+        true,
+        null,
+        "인창동 공원",
+        Region.GYEONGGI,
+        "구리시",
+        null
+    );
+
+    ReflectionTestUtils.setField(post, "postId", postId);
+    ReflectionTestUtils.setField(
+        post,
+        "createdAt",
+        LocalDateTime.of(2026, 11, 1, 3, 0)
+    );
+
+    return post;
+  }
+
+  private RepresentativeImageView representativeImage(
+      Long postId,
+      String imageUrl
+  ) {
+    return new RepresentativeImageView() {
+      @Override
+      public Long getPostId() {
+        return postId;
+      }
+
+      @Override
+      public String getImageUrl() {
+        return imageUrl;
+      }
+    };
   }
 }
