@@ -1,7 +1,7 @@
 package com.poomitda.domain.post.controller;
 
 import com.poomitda.domain.post.dto.*;
-import com.poomitda.domain.post.service.PostService;
+import com.poomitda.domain.post.service.*;
 import com.poomitda.global.response.SuccessResponse;
 import com.poomitda.global.security.principal.MemberPrincipal;
 import jakarta.validation.Valid;
@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class PostController {
 
   private final PostService postService;
+  private final PostListService postListService;
 
   @PostMapping
   public SuccessResponse<PostResponseDto.CreatePostResponse> createPost(
@@ -35,6 +36,16 @@ public class PostController {
     return SuccessResponse.of(
         "공고 상세 조회 성공",
         postService.getPostDetail(memberPrincipal.memberId(), postId)
+    );
+  }
+
+  @GetMapping
+  public SuccessResponse<PostResponseDto.PostListResponse> getPostList(
+      @Valid @ModelAttribute PostRequestDto.PostListRequest request
+  ) {
+    return SuccessResponse.of(
+        "공고 목록 조회 성공",
+        postListService.getPostList(request)
     );
   }
 }
