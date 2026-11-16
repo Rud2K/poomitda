@@ -12,6 +12,11 @@ public enum PostErrorCode implements ErrorCode {
   POST_NOT_FOUND(
       HttpStatus.NOT_FOUND,
       "존재하지 않는 공고입니다."
+  ),
+
+  INVALID_CURSOR(
+      HttpStatus.BAD_REQUEST,
+      "유효하지 않은 커서입니다."
   );
 
   private final HttpStatus httpStatus;
