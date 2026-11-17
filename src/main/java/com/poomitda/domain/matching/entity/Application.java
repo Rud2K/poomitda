@@ -27,89 +27,89 @@ public class Application extends BaseUpdatedTimeEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "application_id", nullable = false, updatable = false)
-  private Long applicationId;
+  private Long applicationId;                           // 신청서 ID
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "post_id", nullable = false, updatable = false)
-  private Post post;
+  private Post post;                                    // 신청 대상 공고
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "applicant_id", nullable = false, updatable = false)
-  private Member applicant;
+  private Member applicant;                             // 신청서를 제출한 회원
 
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "completed_by")
-  private Member completedBy;
+  private Member completedBy;                           // 인계 완료 처리를 수행한 회원
 
   @Column(name = "occupation", length = 50, nullable = false)
-  private String occupation;
+  private String occupation;                            // 신청자의 직업
 
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "housing_type", length = 30, nullable = false)
-  private HousingType housingType;
+  private HousingType housingType;                      // 주거 형태
 
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "housing_ownership", length = 30, nullable = false)
-  private HousingOwnership housingOwnership;
+  private HousingOwnership housingOwnership;            // 주거 소유 형태
 
   @Column(name = "is_landlord_agreed")
-  private Boolean isLandlordAgreed;
+  private Boolean isLandlordAgreed;                     // 임대인의 반려동물 양육 동의 여부
 
   @Column(name = "has_yard_or_balcony", nullable = false)
-  private boolean hasYardOrBalcony;
+  private boolean hasYardOrBalcony;                     // 마당 또는 발코니 보유 여부
 
   @Column(name = "time_away_per_day", nullable = false)
-  private int timeAwayPerDay;
+  private int timeAwayPerDay;                           // 하루 평균 부재 시간. (0~24)
 
   @Column(name = "family_count", nullable = false)
-  private int familyCount;
+  private int familyCount;                              // 가족 수 (0 이상)
 
   @Column(name = "family_ages", length = 100, nullable = false)
-  private String familyAges;
+  private String familyAges;                            // 가족 구성원의 연령 정보
 
   @Column(name = "has_cohabitant_agreed", nullable = false)
-  private boolean hasCohabitantAgreed;
+  private boolean hasCohabitantAgreed;                  // 동거인의 반려동물 양육 동의 여부
 
   @Column(name = "has_allergy", nullable = false)
-  private boolean hasAllergy;
+  private boolean hasAllergy;                           // 반려동물 관련 알레르기 유무
 
   @Column(name = "current_pets", columnDefinition = "TEXT", nullable = false)
-  private String currentPets;
+  private String currentPets;                           // 현재 양육 중인 반려동물 정보
 
   @Column(name = "past_experience_detail", columnDefinition = "TEXT")
-  private String pastExperienceDetail;
+  private String pastExperienceDetail;                  // 과거 반려동물 양육 경험 (선택 입력)
 
   @Column(name = "is_financially_ready", nullable = false)
-  private boolean isFinanciallyReady;
+  private boolean isFinanciallyReady;                   // 반려동물 양육에 필요한 경제적 준비 여부
 
   @Column(name = "pledge_agreed", nullable = false)
-  private boolean pledgeAgreed;
+  private boolean pledgeAgreed;                         // 입양 및 임시보호 서약 동의 여부 (신청 시 true 필수)
 
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "status", length = 20, nullable = false)
-  private ApplicationStatus status;
+  private ApplicationStatus status;                     // 신청 처리 상태 (최초 생성 시 APPLIED)
 
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "completion_method", length = 20)
-  private ApplicationCompletionMethod completionMethod;
+  private ApplicationCompletionMethod completionMethod; // 인계 완료 처리 방식
 
   @Column(name = "completed_at")
-  private LocalDateTime completedAt;
+  private LocalDateTime completedAt;                    // 인계 완료 시각 (UTC 기준)
 
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.VARCHAR)
   @Column(name = "rejection_reason", length = 30)
-  private ApplicationRejectionReason rejectionReason;
+  private ApplicationRejectionReason rejectionReason;   // 신청 거절 사유
 
   @Column(name = "rejected_at")
-  private LocalDateTime rejectedAt;
+  private LocalDateTime rejectedAt;                     // 신청 거절 시각 (UTC 기준)
 
   @Column(name = "approved_at")
-  private LocalDateTime approvedAt;
+  private LocalDateTime approvedAt;                     // 신청 승인 시각 (UTC 기준)
 
   public Application(
       Post post,
