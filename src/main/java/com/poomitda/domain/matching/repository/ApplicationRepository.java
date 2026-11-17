@@ -2,8 +2,8 @@ package com.poomitda.domain.matching.repository;
 
 import com.poomitda.domain.matching.entity.Application;
 import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
-import java.util.Collection;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.*;
+import org.springframework.data.jpa.repository.*;
 
 public interface ApplicationRepository extends JpaRepository<Application, Long> {
 
@@ -32,4 +32,14 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
    * @return 지정한 상태의 신청이 있으면 true, 없으면 false
    */
   boolean existsByPost_PostIdAndStatusIn(Long postId, Collection<ApplicationStatus> statuses);
+
+  /**
+   * 신청을 신청자, 공고 및 공고 작성자 정보와 함께 조회한다.
+   * 공고의 삭제 여부와 신청 상태에 관계없이 조회한다.
+   *
+   * @param applicationId 조회할 신청 ID
+   * @return 신청이 존재하면 {@link Application}을 담은 {@link Optional}, 없으면 빈 {@link Optional}
+   */
+  @EntityGraph(attributePaths = {"applicant", "post", "post.author"})
+  Optional<Application> findByApplicationId(Long applicationId);
 }

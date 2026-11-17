@@ -108,6 +108,12 @@ public class SecurityConfig {
                 "/api/applications"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
+            // 신청 상세 조회는 일반 회원과 보호자만 허용
+            .requestMatchers(
+                HttpMethod.GET,
+                "/api/applications/{applicationId}"
+            ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
+
             // 위 규칙에 해당하지 않는 요청은 인증 필요
             .anyRequest().authenticated()
         );

@@ -8,6 +8,12 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ApplicationErrorCode implements ErrorCode {
 
+  // 요청한 신청이 존재하지 않는 경우
+  APPLICATION_NOT_FOUND(
+      HttpStatus.NOT_FOUND,
+      "존재하지 않는 신청입니다."
+  ),
+
   // 취소와 거절을 포함하여 동일 공고에 신청한 이력이 있는 경우
   APPLICATION_ALREADY_EXISTS(
       HttpStatus.CONFLICT,

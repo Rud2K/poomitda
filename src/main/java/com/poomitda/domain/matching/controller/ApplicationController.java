@@ -27,4 +27,18 @@ public class ApplicationController {
         applicationService.createApplication(memberPrincipal.memberId(), request)
     );
   }
+
+  @GetMapping("/{applicationId}")
+  public SuccessResponse<ApplicationResponseDto.ApplicationDetailResponse> getApplicationDetail(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("applicationId") Long applicationId
+  ) {
+    return SuccessResponse.of(
+        "신청 상세 조회 성공",
+        applicationService.getApplicationDetail(
+            memberPrincipal.memberId(),
+            applicationId
+        )
+    );
+  }
 }

@@ -2,7 +2,7 @@ package com.poomitda.domain.matching.service;
 
 import com.poomitda.domain.matching.dto.ApplicationRequestDto.CreateApplicationRequest;
 import com.poomitda.domain.matching.dto.ApplicationResponseDto;
-import com.poomitda.domain.matching.dto.ApplicationResponseDto.CreateApplicationResponse;
+import com.poomitda.domain.matching.dto.ApplicationResponseDto.*;
 import com.poomitda.domain.matching.entity.Application;
 import com.poomitda.domain.matching.exception.ApplicationErrorCode;
 import com.poomitda.domain.matching.repository.ApplicationRepository;
@@ -128,6 +128,106 @@ public class ApplicationService {
   }
 
   /**
+   * 신청자 본인 또는 해당 공고 작성자에게 신청 상세 정보를 반환한다.
+   *
+   * @param memberId 현재 로그인한 회원 ID
+   * @param applicationId 조회할 신청 ID
+   * @return 신청서와 관련 요약 정보를 담은 {@link ApplicationDetailResponse}
+   * @throws BusinessException 인증 정보가 유효하지 않거나 조회 권한이 없거나 신청이 없는 경우
+   */
+  @Transactional(readOnly = true)
+  public ApplicationResponseDto.ApplicationDetailResponse getApplicationDetail(
+      Long memberId,
+      Long applicationId
+  ) {
+    // 현재 요청자의 인증 정보 확인
+    if (memberId == null) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED) ;
+    }
+
+    Member currentMember = memberRepository.findById(memberId)
+        .orElseThrow(
+            () -> new BusinessException(CommonErrorCode.UNAUTHORIZED)
+        );
+
+    if (currentMember.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 요청자의 역할 확인
+    MemberRole role = currentMember.getRole();
+
+    if (role != MemberRole.ROLE_USER && role != MemberRole.ROLE_PROTECTOR) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 신청 ID의 유효성 확인
+    if (applicationId == null || applicationId <= 0) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 신청과 관련 정보 조회
+    Application application = applicationRepository.findByApplicationId(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 조회 권한 판단에 사용할 관계 준비
+    Member applicant = application.getApplicant();
+    Post post = application.getPost();
+
+    // 신청자 본인 또는 공고 작성자인지 확인
+    if (!memberId.equals(applicant.getMemberId())
+        && !memberId.equals(post.getAuthor().getMemberId())) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 신청자 요약 응답 생성
+    ApplicationApplicantResponse applicantResponse = new ApplicationApplicantResponse(
+        applicant.getMemberId(),
+        applicant.getNickname()
+    );
+
+    // 공고 요약 응답 생성
+    ApplicationPostResponse postResponse = new ApplicationPostResponse(
+        post.getPostId(),
+        post.getTitle(),
+        post.getNoticeType(),
+        post.getSpecies(),
+        post.getStatus()
+    );
+
+    // 전체 신청 상세 응답 생성 후 반환
+    return new ApplicationResponseDto.ApplicationDetailResponse(
+        applicationId,
+        application.getStatus(),
+        applicantResponse,
+        postResponse,
+        application.getOccupation(),
+        application.getHousingType(),
+        application.getHousingOwnership(),
+        application.getIsLandlordAgreed(),
+        application.isHasYardOrBalcony(),
+        application.getTimeAwayPerDay(),
+        application.getFamilyCount(),
+        application.getFamilyAges(),
+        application.isHasCohabitantAgreed(),
+        application.isHasAllergy(),
+        application.getCurrentPets(),
+        application.getPastExperienceDetail(),
+        application.isFinanciallyReady(),
+        application.isPledgeAgreed(),
+        toResponseTime(application.getCreatedAt()),
+        toResponseTime(application.getUpdatedAt()),
+        toResponseTime(application.getApprovedAt()),
+        toResponseTime(application.getCompletedAt()),
+        application.getCompletionMethod(),
+        application.getRejectionReason(),
+        toResponseTime(application.getRejectedAt())
+    );
+  }
+
+  /**
    * 회원을 잠금 조회하고 신청 가능한 상태와 역할인지 확인한다.
    *
    * @param memberId 신청할 회원 ID
@@ -155,5 +255,18 @@ public class ApplicationService {
 
     // 검증을 통과한 applicant 반환
     return applicant;
+  }
+
+  /**
+   * UTC 기준 시각을 동일한 순간의 한국 시각으로 변환한다.
+   *
+   * @param dateTime UTC 기준 시각, null 가능
+   * @return +09:00으로 변환한 시각, 입력이 null이면 null
+   */
+  private OffsetDateTime toResponseTime(LocalDateTime dateTime) {
+    if (dateTime == null) {
+      return null;
+    }
+    return dateTime.atOffset(ZoneOffset.UTC).withOffsetSameInstant(ZoneOffset.ofHours(9));
   }
 }
