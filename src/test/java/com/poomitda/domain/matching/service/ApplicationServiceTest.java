@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.poomitda.domain.matching.dto.ApplicationRequestDto.CreateApplicationRequest;
-import com.poomitda.domain.matching.dto.ApplicationResponseDto.CreateApplicationResponse;
+import com.poomitda.domain.matching.dto.ApplicationResponseDto.*;
 import com.poomitda.domain.matching.entity.Application;
 import com.poomitda.domain.matching.entity.constant.*;
 import com.poomitda.domain.matching.exception.ApplicationErrorCode;
@@ -23,7 +23,7 @@ import java.time.*;
 import java.util.Optional;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.*;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -226,6 +226,115 @@ class ApplicationServiceTest {
     verifyNoInteractions(memberRepository, postRepository);
   }
 
+  @ParameterizedTest
+  @ValueSource(longs = {1L, 2L})
+  @DisplayName("신청자 또는 공고 작성자 -> 신청 상세 반환")
+  void getsApplicationDetailForParticipant(long currentMemberId) {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Member author = createMember(2L);
+    ReflectionTestUtils.setField(author, "role", MemberRole.ROLE_PROTECTOR);
+
+    Post post = createPost(author, null);
+    Application application = createDetailApplication(post, applicant);
+    Member currentMember = currentMemberId == MEMBER_ID ? applicant : author;
+
+    when(memberRepository.findById(currentMemberId))
+        .thenReturn(Optional.of(currentMember));
+    when(applicationRepository.findByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+
+    // when
+    ApplicationDetailResponse response =
+        applicationService.getApplicationDetail(currentMemberId, APPLICATION_ID);
+
+    // then
+    assertAll(
+        () -> assertEquals(APPLICATION_ID, response.applicationId()),
+        () -> assertEquals(ApplicationStatus.APPLIED, response.status()),
+        () -> assertEquals(MEMBER_ID, response.applicant().memberId()),
+        () -> assertEquals(applicant.getNickname(), response.applicant().nickname()),
+        () -> assertEquals(POST_ID, response.post().postId()),
+        () -> assertEquals(post.getTitle(), response.post().title()),
+        () -> assertEquals(post.getNoticeType(), response.post().noticeType()),
+        () -> assertEquals(post.getSpecies(), response.post().species()),
+        () -> assertEquals(post.getStatus(), response.post().status()),
+        () -> assertEquals("회사원", response.occupation()),
+        () -> assertEquals(HousingType.APARTMENT, response.housingType()),
+        () -> assertEquals(HousingOwnership.MONTHLY_RENT, response.housingOwnership()),
+        () -> assertEquals(Boolean.FALSE, response.isLandlordAgreed()),
+        () -> assertFalse(response.hasYardOrBalcony()),
+        () -> assertEquals(8, response.timeAwayPerDay()),
+        () -> assertEquals(2, response.familyCount()),
+        () -> assertEquals("30대 2명", response.familyAges()),
+        () -> assertTrue(response.hasCohabitantAgreed()),
+        () -> assertFalse(response.hasAllergy()),
+        () -> assertEquals("없음", response.currentPets()),
+        () -> assertEquals("강아지 양육 경험 있음", response.pastExperienceDetail()),
+        () -> assertTrue(response.isFinanciallyReady()),
+        () -> assertTrue(response.pledgeAgreed()),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-17T10:20:00+09:00"),
+            response.createdAt()
+        ),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-17T11:20:00+09:00"),
+            response.updatedAt()
+        ),
+        () -> assertNull(response.approvedAt()),
+        () -> assertNull(response.completedAt()),
+        () -> assertNull(response.completionMethod()),
+        () -> assertNull(response.rejectionReason()),
+        () -> assertNull(response.rejectedAt())
+    );
+  }
+
+  @Test
+  @DisplayName("신청자와 공고 작성자가 아닌 회원 -> 조회 권한 오류")
+  void rejectsApplicationDetailForNonParticipant() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(createMember(2L), null);
+    Application application = createDetailApplication(post, applicant);
+    Member otherMember = createMember(3L);
+
+    when(memberRepository.findById(3L))
+        .thenReturn(Optional.of(otherMember));
+    when(applicationRepository.findByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+
+    // when & then
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.getApplicationDetail(3L, APPLICATION_ID)
+    );
+
+    assertEquals(CommonErrorCode.FORBIDDEN, exception.getErrorCode());
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 신청 -> 신청 없음 오류")
+  void rejectsMissingApplicationDetail() {
+    // given
+    Member currentMember = createMember(MEMBER_ID);
+
+    when(memberRepository.findById(MEMBER_ID))
+        .thenReturn(Optional.of(currentMember));
+    when(applicationRepository.findByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.empty());
+
+    // when & then
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.getApplicationDetail(MEMBER_ID, APPLICATION_ID)
+    );
+
+    assertEquals(
+        ApplicationErrorCode.APPLICATION_NOT_FOUND,
+        exception.getErrorCode()
+    );
+  }
+
   private void assertRejected(
       CreateApplicationRequest request,
       ErrorCode expectedErrorCode
@@ -293,5 +402,37 @@ class ApplicationServiceTest {
         true,
         true
     );
+  }
+
+  private Application createDetailApplication(Post post, Member applicant) {
+    CreateApplicationRequest request =
+        createRequest(HousingOwnership.MONTHLY_RENT, false);
+
+    Application application = new Application(
+        post,
+        applicant,
+        request.occupation(),
+        request.housingType(),
+        request.housingOwnership(),
+        request.isLandlordAgreed(),
+        request.hasYardOrBalcony(),
+        request.timeAwayPerDay(),
+        request.familyCount(),
+        request.familyAges(),
+        request.hasCohabitantAgreed(),
+        request.hasAllergy(),
+        request.currentPets(),
+        request.pastExperienceDetail(),
+        request.isFinanciallyReady(),
+        request.pledgeAgreed()
+    );
+
+    ReflectionTestUtils.setField(application, "applicationId", APPLICATION_ID);
+    ReflectionTestUtils.setField(application, "createdAt", CREATED_AT);
+    ReflectionTestUtils.setField(
+        application, "updatedAt", CREATED_AT.plusHours(1)
+    );
+
+    return application;
   }
 }
