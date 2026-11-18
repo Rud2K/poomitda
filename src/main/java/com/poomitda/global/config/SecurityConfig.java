@@ -108,9 +108,10 @@ public class SecurityConfig {
                 "/api/applications"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
-            // 신청 상세 조회는 일반 회원과 보호자만 허용
+            // 내 신청 목록과 신청 상세 조회는 일반 회원과 보호자만 허용
             .requestMatchers(
                 HttpMethod.GET,
+                "/api/applications/me",
                 "/api/applications/{applicationId}"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 

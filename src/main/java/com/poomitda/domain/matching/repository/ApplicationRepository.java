@@ -2,8 +2,11 @@ package com.poomitda.domain.matching.repository;
 
 import com.poomitda.domain.matching.entity.Application;
 import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
+import java.time.LocalDateTime;
 import java.util.*;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
 
 public interface ApplicationRepository extends JpaRepository<Application, Long> {
 
@@ -42,4 +45,39 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
    */
   @EntityGraph(attributePaths = {"applicant", "post", "post.author"})
   Optional<Application> findByApplicationId(Long applicationId);
+
+  /**
+   * 회원이 작성한 신청을 상태와 커서 조건에 따라 최신순으로 조회한다.
+   * 연결된 공고의 삭제 여부와 관계없이 조회한다.
+   *
+   * @param memberId 현재 로그인한 신청자 회원 ID
+   * @param status 조회할 신청 상태, null이면 전체 상태
+   * @param cursorCreatedAt 커서의 UTC 생성 시각, 첫 페이지이면 null
+   * @param cursorApplicationId 커서의 신청 ID, 첫 페이지이면 null
+   * @param pageable 페이지 번호는 0, 조회 개수는 요청 size + 1로 전달
+   * @return 공고 정보를 포함한 신청 목록, 생성 시각과 신청 ID 내림차순
+   */
+  @EntityGraph(attributePaths = "post")
+  @Query("""
+    SELECT a
+    FROM Application a
+    WHERE a.applicant.memberId = :memberId
+      AND (:status IS NULL OR a.status = :status)
+      AND (
+        :cursorCreatedAt IS NULL
+        OR a.createdAt < :cursorCreatedAt
+        OR (
+          a.createdAt = :cursorCreatedAt
+          AND a.applicationId < :cursorApplicationId
+        )
+      )
+    ORDER BY a.createdAt DESC, a.applicationId DESC
+    """)
+  List<Application> findMyApplications(
+      @Param("memberId") Long memberId,
+      @Param("status") ApplicationStatus status,
+      @Param("cursorCreatedAt")LocalDateTime cursorCreatedAt,
+      @Param("cursorApplicationId") Long cursorApplicationId,
+      Pageable pageable
+  );
 }

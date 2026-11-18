@@ -58,4 +58,19 @@ public final class ApplicationRequestDto {
       @AssertTrue(message = "입양 및 임시보호 서약에 동의해야 합니다.")
       Boolean pledgeAgreed
   ) {}
+
+  public record MyApplicationListRequest(
+      ApplicationStatus status,
+      String cursor,
+
+      @Min(value = 1, message = "조회 개수는 1 이상이어야 합니다.")
+      @Max(value = 50, message = "조회 개수는 50 이하여야 합니다.")
+      Integer size
+  ) {
+    public MyApplicationListRequest {
+      if (size == null) {
+        size = 10;
+      }
+    }
+  }
 }

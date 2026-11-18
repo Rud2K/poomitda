@@ -8,6 +8,12 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ApplicationErrorCode implements ErrorCode {
 
+  // 커서 형식이 잘못되었거나 현재 조회 조건과 일치하지 않는 경우
+  INVALID_CURSOR(
+      HttpStatus.BAD_REQUEST,
+      "유효하지 않은 커서입니다."
+  ),
+
   // 요청한 신청이 존재하지 않는 경우
   APPLICATION_NOT_FOUND(
       HttpStatus.NOT_FOUND,

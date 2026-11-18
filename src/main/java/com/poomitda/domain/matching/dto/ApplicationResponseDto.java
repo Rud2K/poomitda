@@ -4,6 +4,7 @@ import com.poomitda.domain.matching.entity.constant.*;
 import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.global.constant.Species;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public final class ApplicationResponseDto {
 
@@ -55,5 +56,33 @@ public final class ApplicationResponseDto {
       ApplicationCompletionMethod completionMethod,
       ApplicationRejectionReason rejectionReason,
       OffsetDateTime rejectedAt
+  ) {}
+
+  public record ApplicationListPostResponse(
+      Long postId,
+      String title,
+      NoticeType noticeType,
+      Species species,
+      PostStatus status,
+      String representativeImageUrl
+  ) {}
+
+  public record MyApplicationListItemResponse(
+      Long applicationId,
+      ApplicationStatus status,
+      ApplicationListPostResponse post,
+      OffsetDateTime createdAt,
+      OffsetDateTime updatedAt,
+      OffsetDateTime approvedAt,
+      OffsetDateTime completedAt,
+      ApplicationCompletionMethod completionMethod,
+      ApplicationRejectionReason rejectionReason,
+      OffsetDateTime rejectedAt
+  ) {}
+
+  public record MyApplicationListResponse(
+      List<MyApplicationListItemResponse> applications,
+      String nextCursor,
+      boolean hasNext
   ) {}
 }
