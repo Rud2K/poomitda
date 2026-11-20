@@ -85,4 +85,23 @@ public final class ApplicationResponseDto {
       String nextCursor,
       boolean hasNext
   ) {}
+
+  public record PostApplicationListItemResponse(
+      Long applicationId,
+      ApplicationStatus status,
+      ApplicationApplicantResponse applicant,
+      OffsetDateTime createdAt,
+      OffsetDateTime updatedAt,
+      OffsetDateTime approvedAt,
+      OffsetDateTime completedAt,
+      ApplicationCompletionMethod completionMethod,
+      ApplicationRejectionReason rejectionReason,
+      OffsetDateTime rejectedAt
+  ) {}
+
+  public record PostApplicationListResponse(
+      List<PostApplicationListItemResponse> applications,
+      String nextCursor,
+      boolean hasNext
+  ) {}
 }

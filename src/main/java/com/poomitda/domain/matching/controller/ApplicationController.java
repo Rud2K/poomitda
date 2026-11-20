@@ -16,6 +16,7 @@ public class ApplicationController {
 
   private final ApplicationService applicationService;
   private final MyApplicationListService myApplicationListService;
+  private final PostApplicationListService postApplicationListService;
 
   @PostMapping
   public SuccessResponse<ApplicationResponseDto.CreateApplicationResponse> createApplication(
@@ -50,6 +51,20 @@ public class ApplicationController {
     return SuccessResponse.of(
         "내가 작성한 신청 목록 조회 성공",
         myApplicationListService.getMyApplications(
+            memberPrincipal.memberId(),
+            request
+        )
+    );
+  }
+
+  @GetMapping
+  public SuccessResponse<ApplicationResponseDto.PostApplicationListResponse> getPostApplications(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @Valid @ModelAttribute ApplicationRequestDto.PostApplicationListRequest request
+  ) {
+    return SuccessResponse.of(
+        "공고에 접수된 신청 목록 조회 성공",
+        postApplicationListService.getPostApplications(
             memberPrincipal.memberId(),
             request
         )

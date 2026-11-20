@@ -73,4 +73,23 @@ public final class ApplicationRequestDto {
       }
     }
   }
+
+  public record PostApplicationListRequest(
+      @NotNull(message = "공고 ID는 필수 입력 항목입니다.")
+      @Positive(message = "공고 ID는 양수여야 합니다.")
+      Long postId,
+
+      ApplicationStatus status,
+      String cursor,
+
+      @Min(value = 1, message = "조회 개수는 1 이상이어야 합니다.")
+      @Max(value = 50, message = "조회 개수는 50 이하여야 합니다.")
+      Integer size
+  ) {
+    public PostApplicationListRequest {
+      if (size == null) {
+        size = 10;
+      }
+    }
+  }
 }

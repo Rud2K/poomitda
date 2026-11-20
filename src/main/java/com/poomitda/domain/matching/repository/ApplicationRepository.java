@@ -80,4 +80,39 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
       @Param("cursorApplicationId") Long cursorApplicationId,
       Pageable pageable
   );
+
+  /**
+   * 공고에 접수된 신청을 상태와 커서 조건에 따라 최신순으로 조회한다.
+   * 연결된 공고의 삭제 여부와 관계 없이 조회한다.
+   *
+   * @param postId 작성자 권한 검증을 통과한 조회 대상 공고 ID
+   * @param status 조회할 신청 상태, null이면 전체 상태
+   * @param cursorCreatedAt 커서의 UTC 생성 시각, 첫 페이지이면 null
+   * @param cursorApplicationId 커서의 신청 ID, 첫 페이지이면 null
+   * @param pageable 페이지 번호는 0, 조회 개수는 요청 size + 1로 전달
+   * @return 신청자 정보를 포함한 신청 목록, 생성 시각과 신청 ID 내림차순
+   */
+  @EntityGraph(attributePaths = "applicant")
+  @Query("""
+    SELECT a
+    FROM Application a
+    WHERE a.post.postId = :postId
+      AND (:status IS NULL OR a.status = :status)
+      AND (
+        :cursorCreatedAt IS NULL
+        OR a.createdAt < :cursorCreatedAt
+        OR (
+          a.createdAt = :cursorCreatedAt
+          AND a.applicationId < :cursorApplicationId
+        )
+      )
+    ORDER BY a.createdAt DESC, a.applicationId DESC
+    """)
+  List<Application> findPostApplications(
+      @Param("postId") Long postId,
+      @Param("status") ApplicationStatus status,
+      @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+      @Param("cursorApplicationId") Long cursorApplicationId,
+      Pageable pageable
+  );
 }

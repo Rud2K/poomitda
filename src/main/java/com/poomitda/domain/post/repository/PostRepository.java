@@ -75,4 +75,13 @@ public interface PostRepository extends JpaRepository<Post, Long>, PostQueryRepo
       @Param("lastPostId") Long lastPostId,
       Pageable pageable
   );
+
+  /**
+   * 삭제 여부와 관계없이 공고를 작성자 정보와 함께 조회힌다.
+   *
+   * @param postId 조회할 공고 ID
+   * @return 공고가 존재하면 {@link Post}를 담은 {@link Optional}, 없으면 빈 {@link Optional}
+   */
+  @EntityGraph(attributePaths = "author")
+  Optional<Post> findByPostId(Long postId);
 }
