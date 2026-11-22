@@ -4,6 +4,7 @@ import com.poomitda.domain.matching.dto.ApplicationRequestDto.CreateApplicationR
 import com.poomitda.domain.matching.dto.ApplicationResponseDto;
 import com.poomitda.domain.matching.dto.ApplicationResponseDto.*;
 import com.poomitda.domain.matching.entity.Application;
+import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
 import com.poomitda.domain.matching.exception.ApplicationErrorCode;
 import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.matching.validation.ApplicationCreateValidator;
@@ -11,12 +12,13 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.domain.post.entity.Post;
-import com.poomitda.domain.post.entity.constant.PostStatus;
+import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.domain.post.exception.PostErrorCode;
 import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.exception.CommonErrorCode;
 import com.poomitda.global.exception.exception.BusinessException;
 import java.time.*;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -225,6 +227,116 @@ public class ApplicationService {
         application.getRejectionReason(),
         toResponseTime(application.getRejectedAt())
     );
+  }
+
+  /**
+   * 본인의 접수 상태 신청을 취소하고 필요한 공고 상태 변경을 처리한다.
+   *
+   * @param memberId 현재 로그인한 회원 ID
+   * @param applicationId 취소할 신청 ID
+   * @return 취소된 신청 정보를 담은 {@link ApplicationCancelResponse}
+   * @throws BusinessException 인증, 권한, 입력값 또는 신청 상태가 유효하지 않은 경우
+   */
+  @Transactional
+  public ApplicationResponseDto.ApplicationCancelResponse cancelApplication(
+      Long memberId,
+      Long applicationId
+  ) {
+    // 로그인 회원 ID 누락 확인
+    if (memberId == null) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원을 잠금 조회하고 활성 상태와 역할 검증
+    Member currentMember = getApplicantForUpdate(memberId);
+
+    // 신청 ID 검증
+    if (applicationId == null || applicationId <= 0) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 신청이 속한 공고 ID 조회
+    Long postId = applicationRepository.findPostIdByApplicationId(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 삭제된 공고도 포함하여 공고 잠금 조회
+    Post post = postRepository.findByIdIncludingDeletedForUpdate(postId)
+        .orElseThrow(
+            () -> new BusinessException(PostErrorCode.POST_NOT_FOUND)
+        );
+
+    // 신청 잠금 조회
+    Application application = applicationRepository.findByIdForUpdate(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 신청자 본인인지 확인
+    if (!currentMember.getMemberId().equals(application.getApplicant().getMemberId())) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 접수 상태의 신청을 취소
+    application.cancel();
+
+    // 신청 상태 변경과 Auditing 수정 시각을 DB에 반영
+    applicationRepository.flush();
+
+    // 취소 후 남은 신청과 접수 마감 여부에 따라 공고 상태 갱신
+    updatePostStatusAfterCancellation(post);
+
+    // 취소된 신청 정보와 한국 시각으로 변환한 수정 시각 반환
+    return new ApplicationCancelResponse(
+        application.getApplicationId(),
+        application.getStatus(),
+        toResponseTime(application.getUpdatedAt())
+    );
+  }
+
+  /**
+   * 신청 취소 후 접수 마감 여부와 남은 신청 상태에 따라 공고 상태를 갱신한다.
+   * 호출자는 공고 잠금을 보유하고 취소된 신청을 flush한 상태여야 한다.
+   *
+   * @param post 잠금 조회한 공고
+   * @throws IllegalStateException 마감된 미종료 공고에 승인 또는 완료된 신청이 있는 경우
+   */
+  private void updatePostStatusAfterCancellation(Post post) {
+    // 이미 종료된 공고의 상태와 종료 정보 유지
+    if (post.getStatus() == PostStatus.CLOSED) return;
+
+    // 마감 판단에 사용할 현재 UTC 시각 생성
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+    // 접수 마감 전이면 공고 상태 유지
+    if (!post.isRecruitmentDeadlineReached(now)) return;
+
+    // 승인 또는 완료된 신청을 잠금 조회
+    List<Application> selectedApplications = applicationRepository.findByPostIdAndStatusInForUpdate(
+        post.getPostId(),
+        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+    );
+
+    // 미종료 공고에 선정된 신청이 있는 상태 불일치 차단
+    if (!selectedApplications.isEmpty()) {
+      throw new IllegalStateException("종료되지 않은 공고에 승인 또는 완료된 신청이 존재합니다.");
+    }
+
+    // 접수 또는 심사 중인 신청을 잠금 조회
+    List<Application> pendingApplications = applicationRepository.findByPostIdAndStatusInForUpdate(
+        post.getPostId(),
+        List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+    );
+
+    // 선정 후보가 남아 있으면 접수만 마감
+    if (!pendingApplications.isEmpty()) {
+      post.closeReception();
+      return;
+    }
+
+    // 선정 후보가 없으면 미선정 사유로 공고 종료
+    post.closeAfterDeadline(PostClosedReason.NO_SELECTION, now);
   }
 
   /**

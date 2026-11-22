@@ -2,6 +2,7 @@ package com.poomitda.domain.matching.repository;
 
 import com.poomitda.domain.matching.entity.Application;
 import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.*;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +46,56 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
    */
   @EntityGraph(attributePaths = {"applicant", "post", "post.author"})
   Optional<Application> findByApplicationId(Long applicationId);
+
+  /**
+   * 신청이 속한 공고의 ID를 조회한다.
+   * 공고 잠금 전에 대상 ID를 확인하기 위한 조회이며 잠금을 획득하지 않는다.
+   *
+   * @param applicationId 공고 ID를 확인할 신청 ID
+   * @return 신청이 존재하면 공고 ID, 없으면 빈 {@link Optional}
+   */
+  @Query("""
+      SELECT a.post.postId
+      FROM Application a
+      WHERE a.applicationId = :applicationId
+      """)
+  Optional<Long> findPostIdByApplicationId(@Param("applicationId") Long applicationId);
+
+  /**
+   * 신청을 조회하고 비관적 쓰기 잠금을 획득한다.
+   * 호출자는 같은 트랜잭션에서 해당 공고의 잠금을 먼저 획득해야 한다.
+   *
+   * @param applicationId 잠금 조회할 신청 ID
+   * @return 신청이 존재하면 {@link Application}을 담은 {@link Optional}, 없으면 빈 {@link Optional}
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      SELECT a
+      FROM Application a
+      WHERE a.applicationId = :applicationId
+      """)
+  Optional<Application> findByIdForUpdate(@Param("applicationId") Long applicationId);
+
+  /**
+   * 공고의 지정한 상태에 해당하는 신청들을 비관적 쓰기 잠금으로 조회한다.
+   * 호출자는 같은 트랜잭션에서 해당 공고의 잠금을 먼저 획득해야 한다.
+   *
+   * @param postId 신청 상태를 확인할 공고 ID
+   * @param statuses 조회할 신청 상태 목록, 비어 있지 않아야 한다.
+   * @return 조건에 해당하는 신청 {@link List}, 없으면 빈 {@link List}
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      SELECT a
+      FROM Application a
+      WHERE a.post.postId = :postId
+        AND a.status IN :statuses
+      ORDER BY a.applicationId ASC
+      """)
+  List<Application> findByPostIdAndStatusInForUpdate(
+      @Param("postId") Long postId,
+      @Param("statuses") Collection<ApplicationStatus> statuses
+  );
 
   /**
    * 회원이 작성한 신청을 상태와 커서 조건에 따라 최신순으로 조회한다.

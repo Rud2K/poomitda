@@ -51,6 +51,20 @@ public interface PostRepository extends JpaRepository<Post, Long>, PostQueryRepo
   Optional<Post> findByIdForUpdate(@Param("postId") Long postId);
 
   /**
+   * 삭제 여부와 관계없이 공고를 조회하고 비관적 쓰기 잠금을 획득한다.
+   *
+   * @param postId 잠금 조회할 공고 ID
+   * @return 공고가 존재하면 {@link Post}를 담은 {@link Optional}, 없으면 빈 {@link Optional}
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("""
+      SELECT p
+      FROM Post p
+      WHERE p.postId = :postId
+      """)
+  Optional<Post> findByIdIncludingDeletedForUpdate(@Param("postId") Long postId);
+
+  /**
    * 기준 시각에 마감된 미종료 공고의 ID를 마지막 조회 ID 이후부터 오름차순으로 조회한다.
    *
    * @param statuses 조회할 공고 상태 목록. 비어있지 않아야 한다.

@@ -1,9 +1,11 @@
 package com.poomitda.domain.matching.entity;
 
 import com.poomitda.domain.matching.entity.constant.*;
+import com.poomitda.domain.matching.exception.ApplicationErrorCode;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.post.entity.Post;
 import com.poomitda.global.entity.BaseUpdatedTimeEntity;
+import com.poomitda.global.exception.exception.BusinessException;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.*;
@@ -152,5 +154,17 @@ public class Application extends BaseUpdatedTimeEntity {
     this.rejectionReason = null;
     this.rejectedAt = null;
     this.approvedAt = null;
+  }
+
+  /**
+   * 접수 상태의 신청을 취소한다.
+   *
+   * @throws BusinessException 신청이 APPLIED 상태가 아닌 경우
+   */
+  public void cancel() {
+    if (this.status != ApplicationStatus.APPLIED) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_CANCELLED);
+    }
+    this.status = ApplicationStatus.CANCELLED;
   }
 }

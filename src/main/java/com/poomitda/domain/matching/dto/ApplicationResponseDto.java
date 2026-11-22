@@ -17,6 +17,12 @@ public final class ApplicationResponseDto {
       OffsetDateTime createdAt
   ) {}
 
+  public record ApplicationCancelResponse(
+      Long applicationId,
+      ApplicationStatus status,
+      OffsetDateTime updatedAt
+  ) {}
+
   public record ApplicationApplicantResponse(
       Long memberId,
       String nickname

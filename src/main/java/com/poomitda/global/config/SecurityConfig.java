@@ -116,6 +116,11 @@ public class SecurityConfig {
                 "/api/applications/{applicationId}"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
+            .requestMatchers(
+                HttpMethod.PATCH,
+                "/api/applications/{applicationId}/cancel"
+            ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
+
             // 위 규칙에 해당하지 않는 요청은 인증 필요
             .anyRequest().authenticated()
         );

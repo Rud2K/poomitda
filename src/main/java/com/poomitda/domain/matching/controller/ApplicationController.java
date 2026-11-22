@@ -70,4 +70,18 @@ public class ApplicationController {
         )
     );
   }
+
+  @PatchMapping("/{applicationId}/cancel")
+  public SuccessResponse<ApplicationResponseDto.ApplicationCancelResponse> cancelApplication(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("applicationId") Long applicationId
+  ) {
+    return SuccessResponse.of(
+        "신청이 취소되었습니다.",
+        applicationService.cancelApplication(
+            memberPrincipal.memberId(),
+            applicationId
+        )
+    );
+  }
 }

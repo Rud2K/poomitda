@@ -8,6 +8,12 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ApplicationErrorCode implements ErrorCode {
 
+  // 신청이 APPLIED 상태가 아니어서 취소할 수 없는 경우
+  APPLICATION_CANNOT_BE_CANCELLED(
+      HttpStatus.CONFLICT,
+      "현재 상태에서는 신청을 취소할 수 없습니다."
+  ),
+
   // 커서 형식이 잘못되었거나 현재 조회 조건과 일치하지 않는 경우
   INVALID_CURSOR(
       HttpStatus.BAD_REQUEST,
