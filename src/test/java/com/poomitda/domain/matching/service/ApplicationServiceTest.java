@@ -14,13 +14,13 @@ import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.MemberRole;
 import com.poomitda.domain.member.repository.MemberRepository;
 import com.poomitda.domain.post.entity.Post;
-import com.poomitda.domain.post.entity.constant.NoticeType;
+import com.poomitda.domain.post.entity.constant.*;
 import com.poomitda.domain.post.repository.PostRepository;
 import com.poomitda.global.constant.*;
 import com.poomitda.global.exception.*;
 import com.poomitda.global.exception.exception.BusinessException;
 import java.time.*;
-import java.util.Optional;
+import java.util.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
@@ -333,6 +333,396 @@ class ApplicationServiceTest {
         ApplicationErrorCode.APPLICATION_NOT_FOUND,
         exception.getErrorCode()
     );
+  }
+
+  @Test
+  @DisplayName("마감 전 본인의 접수 상태 신청 -> 취소 응답 반환 및 모집 상태 유지")
+  void cancelsOwnAppliedApplicationBeforeDeadline() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(
+        createMember(2L),
+        LocalDateTime.now(ZoneOffset.UTC).plusDays(1)
+    );
+    Application application = createDetailApplication(post, applicant);
+    LocalDateTime updatedAt = CREATED_AT.plusDays(1);
+
+    when(memberRepository.findByIdForUpdate(MEMBER_ID))
+        .thenReturn(Optional.of(applicant));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdIncludingDeletedForUpdate(POST_ID))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+
+    doAnswer(invocation -> {
+      ReflectionTestUtils.setField(application, "updatedAt", updatedAt);
+      return null;
+    }).when(applicationRepository).flush();
+
+    // when
+    ApplicationCancelResponse response = applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID);
+
+    // then
+    assertAll(
+        () -> assertEquals(ApplicationStatus.CANCELLED, application.getStatus()),
+        () -> assertEquals(APPLICATION_ID, response.applicationId()),
+        () -> assertEquals(ApplicationStatus.CANCELLED, response.status()),
+        () -> assertEquals(
+            OffsetDateTime.parse("2026-11-18T10:20:00+09:00"),
+            response.updatedAt()
+        ),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus()),
+        () -> assertNull(post.getClosedAt()),
+        () -> assertNull(post.getClosedReason())
+    );
+
+    verify(applicationRepository).flush();
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationStatus.class,
+      names = "APPLIED",
+      mode = EnumSource.Mode.EXCLUDE
+  )
+  @DisplayName("접수 상태가 아닌 본인 신청 -> 취소 불가 오류 및 상태 유지")
+  void rejectsCancellationForNonAppliedStatus(ApplicationStatus status) {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(createMember(2L), null);
+    Application application = createDetailApplication(post, applicant);
+
+    if (status == ApplicationStatus.CANCELLED) {
+      application.cancel();
+    } else {
+      ReflectionTestUtils.setField(application, "status", status);
+    }
+
+    when(memberRepository.findByIdForUpdate(MEMBER_ID))
+        .thenReturn(Optional.of(applicant));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdIncludingDeletedForUpdate(POST_ID))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+
+    // when & then
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID)
+    );
+
+    assertAll(
+        () -> assertEquals(
+            ApplicationErrorCode.APPLICATION_CANNOT_BE_CANCELLED,
+            exception.getErrorCode()
+        ),
+        () -> assertEquals(status, application.getStatus()),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus())
+    );
+
+    verify(applicationRepository, never()).flush();
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {2L, 3L})
+  @DisplayName("공고 작성자 또는 제삼자의 취소 요청 -> 권한 오류 및 신청 상태 유지")
+  void rejectsCancellationForNonApplicant(long currentMemberId) {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Member author = createMember(2L);
+    ReflectionTestUtils.setField(author, "role", MemberRole.ROLE_PROTECTOR);
+
+    Post post = createPost(author, null);
+    Application application = createDetailApplication(post, applicant);
+    Member currentMember = currentMemberId == 2L
+        ? author
+        : createMember(currentMemberId);
+
+    when(memberRepository.findByIdForUpdate(currentMemberId))
+        .thenReturn(Optional.of(currentMember));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdIncludingDeletedForUpdate(POST_ID))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+
+    // when & then
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.cancelApplication(
+            currentMemberId, APPLICATION_ID
+        )
+    );
+
+    assertAll(
+        () -> assertEquals(CommonErrorCode.FORBIDDEN, exception.getErrorCode()),
+        () -> assertEquals(ApplicationStatus.APPLIED, application.getStatus()),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus())
+    );
+
+    verify(applicationRepository, never()).flush();
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+  }
+
+  @Test
+  @DisplayName("접수 마감 후 마지막 후보의 신청 취소 -> 미선정 사유로 공고 종료")
+  void closesExpiredPostAfterLastApplicationCancelled() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(
+        createMember(2L),
+        LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
+    );
+    post.closeReception();
+    Application application = createDetailApplication(post, applicant);
+
+    when(memberRepository.findByIdForUpdate(MEMBER_ID))
+        .thenReturn(Optional.of(applicant));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdIncludingDeletedForUpdate(POST_ID))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+    when(applicationRepository.findByPostIdAndStatusInForUpdate(
+        POST_ID,
+        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+    )).thenReturn(List.of());
+    when(applicationRepository.findByPostIdAndStatusInForUpdate(
+        POST_ID,
+        List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+    )).thenReturn(List.of());
+
+    // when
+    LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+    ApplicationCancelResponse response = applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID);
+    LocalDateTime after = LocalDateTime.now(ZoneOffset.UTC);
+
+    // then
+    assertAll(
+        () -> assertEquals(ApplicationStatus.CANCELLED, application.getStatus()),
+        () -> assertEquals(ApplicationStatus.CANCELLED, response.status()),
+        () -> assertEquals(PostStatus.CLOSED, post.getStatus()),
+        () -> assertEquals(PostClosedReason.NO_SELECTION, post.getClosedReason())
+    );
+    assertNotNull(post.getClosedAt());
+    assertFalse(post.getClosedAt().isBefore(before));
+    assertFalse(post.getClosedAt().isAfter(after));
+
+    verify(applicationRepository).flush();
+  }
+
+  @Test
+  @DisplayName("접수 마감 후 다른 후보가 남은 신청 취소 -> 접수만 마감")
+  void closesOnlyReceptionWhenAnotherCandidateRemains() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(
+        createMember(2L),
+        LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
+    );
+    Application application = createDetailApplication(post, applicant);
+    Application remainingApplication = createDetailApplication(post, createMember(3L));
+    ReflectionTestUtils.setField(
+        remainingApplication, "applicationId", APPLICATION_ID + 1
+    );
+
+    when(memberRepository.findByIdForUpdate(MEMBER_ID))
+        .thenReturn(Optional.of(applicant));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdIncludingDeletedForUpdate(POST_ID))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(APPLICATION_ID))
+        .thenReturn(Optional.of(application));
+    when(applicationRepository.findByPostIdAndStatusInForUpdate(
+        POST_ID,
+        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+    )).thenReturn(List.of());
+    when(applicationRepository.findByPostIdAndStatusInForUpdate(
+        POST_ID,
+        List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+    )).thenReturn(List.of(remainingApplication));
+
+    // when
+    ApplicationCancelResponse response = applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID);
+
+    // then
+    assertAll(
+        () -> assertEquals(ApplicationStatus.CANCELLED, application.getStatus()),
+        () -> assertEquals(ApplicationStatus.CANCELLED, response.status()),
+        () -> assertEquals(
+            ApplicationStatus.APPLIED, remainingApplication.getStatus()
+        ),
+        () -> assertEquals(PostStatus.RECEPTION_CLOSED, post.getStatus()),
+        () -> assertNull(post.getClosedReason()),
+        () -> assertNull(post.getClosedAt())
+    );
+
+    verify(applicationRepository).flush();
+  }
+
+  @Test
+  @DisplayName("삭제된 공고의 본인 접수 상태 신청 -> 취소 허용")
+  void cancelsApplicationForDeletedPost() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(createMember(2L), null);
+    LocalDateTime deletedAt = CREATED_AT.plusHours(2);
+    ReflectionTestUtils.setField(post, "deletedAt", deletedAt);
+
+    Application application = createDetailApplication(post, applicant);
+    stubCancellationLookup(applicant, post, application);
+
+    // when
+    ApplicationCancelResponse response = applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID);
+
+    // then
+    assertAll(
+        () -> assertEquals(ApplicationStatus.CANCELLED, application.getStatus()),
+        () -> assertEquals(ApplicationStatus.CANCELLED, response.status()),
+        () -> assertEquals(deletedAt, post.getDeletedAt()),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus())
+    );
+
+    verify(postRepository).findByIdIncludingDeletedForUpdate(POST_ID);
+    verify(applicationRepository).flush();
+  }
+
+  @Test
+  @DisplayName("이미 종료된 공고의 신청 취소 -> 기존 종료 사유와 시각 유지")
+  void preservesClosedPostInformationOnCancellation() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    LocalDateTime closedAt = CREATED_AT.plusDays(1);
+    Post post = createPost(createMember(2L), CREATED_AT);
+    post.closeAfterDeadline(PostClosedReason.NO_SELECTION, closedAt);
+
+    Application application = createDetailApplication(post, applicant);
+    stubCancellationLookup(applicant, post, application);
+
+    // when
+    ApplicationCancelResponse response = applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID);
+
+    // then
+    assertAll(
+        () -> assertEquals(ApplicationStatus.CANCELLED, application.getStatus()),
+        () -> assertEquals(ApplicationStatus.CANCELLED, response.status()),
+        () -> assertEquals(PostStatus.CLOSED, post.getStatus()),
+        () -> assertEquals(PostClosedReason.NO_SELECTION, post.getClosedReason()),
+        () -> assertEquals(closedAt, post.getClosedAt())
+    );
+
+    verify(applicationRepository).flush();
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 신청의 취소 요청 -> 신청 없음 오류")
+  void rejectsCancellationForMissingApplication() {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+
+    when(memberRepository.findByIdForUpdate(MEMBER_ID))
+        .thenReturn(Optional.of(applicant));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.empty());
+
+    // when & then
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID)
+    );
+
+    assertEquals(
+        ApplicationErrorCode.APPLICATION_NOT_FOUND,
+        exception.getErrorCode()
+    );
+    verifyNoInteractions(postRepository);
+    verify(applicationRepository, never()).findByIdForUpdate(anyLong());
+    verify(applicationRepository, never()).flush();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationStatus.class,
+      names = {"APPROVED", "COMPLETED"}
+  )
+  @DisplayName("마감된 미종료 공고에 선정된 신청 존재 -> 상태 불일치 예외")
+  void rejectsInconsistentExpiredPostOnCancellation(
+      ApplicationStatus selectedStatus
+  ) {
+    // given
+    Member applicant = createMember(MEMBER_ID);
+    Post post = createPost(
+        createMember(2L),
+        LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
+    );
+    Application application = createDetailApplication(post, applicant);
+    Application selectedApplication = createDetailApplication(post, createMember(3L));
+
+    ReflectionTestUtils.setField(
+        selectedApplication, "applicationId", APPLICATION_ID + 1
+    );
+    ReflectionTestUtils.setField(
+        selectedApplication, "status", selectedStatus
+    );
+
+    stubCancellationLookup(applicant, post, application);
+    when(applicationRepository.findByPostIdAndStatusInForUpdate(
+        POST_ID,
+        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+    )).thenReturn(List.of(selectedApplication));
+
+    // when & then
+    IllegalStateException exception = assertThrows(
+        IllegalStateException.class,
+        () -> applicationService.cancelApplication(MEMBER_ID, APPLICATION_ID)
+    );
+
+    assertAll(
+        () -> assertEquals(
+            "종료되지 않은 공고에 승인 또는 완료된 신청이 존재합니다.",
+            exception.getMessage()
+        ),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus()),
+        () -> assertNull(post.getClosedReason()),
+        () -> assertNull(post.getClosedAt())
+    );
+
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(
+            POST_ID,
+            List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+        );
+  }
+
+  private void stubCancellationLookup(
+      Member currentMember,
+      Post post,
+      Application application
+  ) {
+    when(memberRepository.findByIdForUpdate(currentMember.getMemberId()))
+        .thenReturn(Optional.of(currentMember));
+    when(applicationRepository.findPostIdByApplicationId(
+        application.getApplicationId()
+    )).thenReturn(Optional.of(post.getPostId()));
+    when(postRepository.findByIdIncludingDeletedForUpdate(post.getPostId()))
+        .thenReturn(Optional.of(post));
+    when(applicationRepository.findByIdForUpdate(
+        application.getApplicationId()
+    )).thenReturn(Optional.of(application));
   }
 
   private void assertRejected(
