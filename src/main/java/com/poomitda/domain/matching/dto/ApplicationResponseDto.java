@@ -23,6 +23,12 @@ public final class ApplicationResponseDto {
       OffsetDateTime updatedAt
   ) {}
 
+  public record ApplicationReviewResponse(
+      Long applicationId,
+      ApplicationStatus status,
+      OffsetDateTime updatedAt
+  ) {}
+
   public record ApplicationApplicantResponse(
       Long memberId,
       String nickname

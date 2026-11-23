@@ -84,4 +84,18 @@ public class ApplicationController {
         )
     );
   }
+
+  @PatchMapping("/{applicationId}/review")
+  public SuccessResponse<ApplicationResponseDto.ApplicationReviewResponse> reviewApplication(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("applicationId") Long applicationId
+  ) {
+    return SuccessResponse.of(
+        "신청 심사가 시작되었습니다.",
+        applicationService.reviewApplication(
+            memberPrincipal.memberId(),
+            applicationId
+        )
+    );
+  }
 }

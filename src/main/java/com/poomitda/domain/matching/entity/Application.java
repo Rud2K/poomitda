@@ -167,4 +167,16 @@ public class Application extends BaseUpdatedTimeEntity {
     }
     this.status = ApplicationStatus.CANCELLED;
   }
+
+  /**
+   * 접수 상태의 신청에 대한 심사를 시작한다.
+   *
+   * @throws BusinessException 신청이 APPLIED 상태가 아닌 경우
+   */
+  public void startReview() {
+    if (this.status != ApplicationStatus.APPLIED) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_REVIEWED);
+    }
+    this.status = ApplicationStatus.UNDER_REVIEW;
+  }
 }

@@ -296,6 +296,88 @@ public class ApplicationService {
   }
 
   /**
+   * 공고 작성자가 접수 상태 신청의 심사를 시작한다.
+   *
+   * @param memberId 현재 로그인한 보호자 회원 ID
+   * @param applicationId 심사를 시작할 신청 ID
+   * @return 심사를 시작한 신청 정보를 담은 {@link ApplicationReviewResponse}
+   * @throws BusinessException 인증, 권한, 입력값, 공고 또는 신청 상태가 유효하지 않은 경우
+   */
+  @Transactional
+  public ApplicationResponseDto.ApplicationReviewResponse reviewApplication(
+      Long memberId,
+      Long applicationId
+  ) {
+    // 로그인 회원 ID 누락 확인
+    if (memberId == null) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원을 잠금 조회하고 활성 상태 검증
+    Member currentMember = memberRepository.findByIdForUpdate(memberId)
+        .orElseThrow(
+            () -> new BusinessException(CommonErrorCode.UNAUTHORIZED)
+        );
+
+    if (currentMember.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원의 보호자 역할 검증
+    if (currentMember.getRole() != MemberRole.ROLE_PROTECTOR) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 신청 ID 검증
+    if (applicationId == null || applicationId <= 0) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 신청이 속한 공고 ID 조회
+    Long postId = applicationRepository.findPostIdByApplicationId(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 삭제되지 않은 공고를 잠금 조회
+    Post post = postRepository.findByIdForUpdate(postId)
+        .orElseThrow(
+            () -> new BusinessException(PostErrorCode.POST_NOT_FOUND)
+        );
+
+    // 신청 잠금 조회
+    Application application = applicationRepository.findByIdForUpdate(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 현재 회원이 공고 작성자인지 확인
+    if (!currentMember.getMemberId().equals(post.getAuthor().getMemberId())) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 공고가 심사 가능한 상태인지 확인
+    PostStatus postStatus = post.getStatus();
+
+    if (postStatus != PostStatus.RECRUITING && postStatus != PostStatus.RECEPTION_CLOSED) {
+      throw new BusinessException(ApplicationErrorCode.POST_ALREADY_CLOSED);
+    }
+
+    // 신청 상태를 검증하고 심사 시작
+    application.startReview();
+
+    // 신청 상태 변경과 Auditing 수정 시각을 DB에 반영
+    applicationRepository.flush();
+
+    // 심사를 시작한 신청 정보 반환
+    return new ApplicationResponseDto.ApplicationReviewResponse(
+        application.getApplicationId(),
+        application.getStatus(),
+        toResponseTime(application.getUpdatedAt())
+    );
+  }
+
+  /**
    * 신청 취소 후 접수 마감 여부와 남은 신청 상태에 따라 공고 상태를 갱신한다.
    * 호출자는 공고 잠금을 보유하고 취소된 신청을 flush한 상태여야 한다.
    *
