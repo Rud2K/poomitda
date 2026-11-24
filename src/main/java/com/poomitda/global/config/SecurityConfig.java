@@ -122,11 +122,12 @@ public class SecurityConfig {
                 "/api/applications/{applicationId}/cancel"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
-            // 신청 심사 시작과 거절은 보호자만 허용
+            // 신청 심사 시작, 거절, 승인은 보호자만 허용
             .requestMatchers(
                 HttpMethod.PATCH,
                 "/api/applications/{applicationId}/review",
-                "/api/applications/{applicationId}/reject"
+                "/api/applications/{applicationId}/reject",
+                "/api/applications/{applicationId}/approve"
             ).hasAnyAuthority("ROLE_PROTECTOR")
 
             // 위 규칙에 해당하지 않는 요청은 인증 필요

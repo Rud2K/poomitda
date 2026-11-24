@@ -37,6 +37,19 @@ public final class ApplicationResponseDto {
       OffsetDateTime rejectedAt
   ) {}
 
+  public record ApplicationApproveResponse(
+      Long applicationId,
+      ApplicationStatus status,
+      Long postId,
+      PostStatus postStatus,
+      PostClosedReason closedReason,
+      OffsetDateTime updatedAt,
+      OffsetDateTime approvedAt,
+      OffsetDateTime closedAt,
+      OffsetDateTime completedAt,
+      ApplicationCompletionMethod completionMethod
+  ) {}
+
   public record ApplicationApplicantResponse(
       Long memberId,
       String nickname

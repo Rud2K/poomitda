@@ -149,4 +149,25 @@ public class Post extends BaseDeletedTimeEntity {
     this.closedReason = reason;
     this.closedAt = now;
   }
+
+  /**
+   * 신청 승인에 따라 공고를 선정 완료 사유로 종료한다.
+   *
+   * @param now UTC 기준 종료 시각
+   * @throws IllegalArgumentException 종료 시각이 null인 경우
+   * @throws IllegalStateException 공고가 RECRUITING 또는 RECEPTION_CLOSED 상태가 아닌 경우
+   */
+  public void closeAsMatched(LocalDateTime now) {
+    if (now == null) {
+      throw new IllegalArgumentException("종료 시각은 null일 수 없습니다.");
+    }
+
+    if (this.status != PostStatus.RECRUITING && this.status != PostStatus.RECEPTION_CLOSED) {
+      throw new IllegalStateException("신청 승인에 따른 종료는 접수 중 또는 접수 마감 상태의 공고만 가능합니다.");
+    }
+
+    this.status = PostStatus.CLOSED;
+    this.closedReason = PostClosedReason.MATCHED;
+    this.closedAt = now;
+  }
 }

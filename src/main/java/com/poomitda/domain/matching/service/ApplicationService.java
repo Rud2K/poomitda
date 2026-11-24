@@ -466,6 +466,128 @@ public class ApplicationService {
   }
 
   /**
+   * 공고 작성자가 신청을 승인하고 공고 종료와 다른 대기 신청의 자동 거절을 처리한다.
+   * 
+   * @param memberId 현재 로그인한 보호자 회원 ID
+   * @param applicationId 승인할 신청 ID
+   * @return 승인된 신청과 공고 종료 정보를 담은 {@link ApplicationApproveResponse}
+   * @throws BusinessException 인증, 권한, 입력값, 공고 또는 신청 상태가 유효하지 않은 경우
+   */
+  @Transactional
+  public ApplicationResponseDto.ApplicationApproveResponse approveApplication(
+      Long memberId,
+      Long applicationId
+  ) {
+    // 로그인 회원 ID 누락 확인
+    if (memberId == null) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원을 잠금 조회하고 활성 상태 검증
+    Member currentMember = memberRepository.findByIdForUpdate(memberId)
+        .orElseThrow(
+            () -> new BusinessException(CommonErrorCode.UNAUTHORIZED)
+        );
+
+    if (currentMember.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원의 보호자 역할 검증
+    if (currentMember.getRole() != MemberRole.ROLE_PROTECTOR) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 신청 ID 검증
+    if (applicationId == null || applicationId <= 0) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 신청이 속한 공고 ID 조회
+    Long postId = applicationRepository.findPostIdByApplicationId(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 삭제되지 않은 공고를 잠금 조회
+    Post post = postRepository.findByIdForUpdate(postId)
+        .orElseThrow(
+            () -> new BusinessException(PostErrorCode.POST_NOT_FOUND)
+        );
+
+    // 승인 대상 신청을 잠금 조회
+    Application application = applicationRepository.findByIdForUpdate(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 현재 회원이 공고 작성자인지 확인
+    if (!currentMember.getMemberId().equals(post.getAuthor().getMemberId())) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 공고가 심사 가능한 상태인지 확인
+    PostStatus postStatus = post.getStatus();
+
+    if (postStatus != PostStatus.RECRUITING && postStatus != PostStatus.RECEPTION_CLOSED) {
+      throw new BusinessException(ApplicationErrorCode.POST_ALREADY_CLOSED);
+    }
+
+    // 승인 대상 신청의 상태 확인
+    if (application.getStatus() != ApplicationStatus.UNDER_REVIEW) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_APPROVED);
+    }
+
+    // 같은 공고의 승인 또는 완료된 신청을 잠금 조회
+    List<Application> selectedApplications = applicationRepository.findByPostIdAndStatusInForUpdate(
+        postId,
+        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+    );
+
+    if (!selectedApplications.isEmpty()) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_APPROVED);
+    }
+
+    // 같은 공고의 접수 또는 심사 중인 신청을 잠금 조회
+    List<Application> pendingApplications = applicationRepository.findByPostIdAndStatusInForUpdate(
+        postId,
+        List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+    );
+
+    // 상태 변경에 공통으로 사용할 UTC 시각 생성
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+    // 대상 신청 승인 및 공고 종료
+    application.approve(now);
+    post.closeAsMatched(now);
+
+    // 다른 대기 신청 자동 거절 반복 시작
+    for (Application pendingApplication : pendingApplications) {
+      if (pendingApplication.getApplicationId().equals(applicationId)) {
+        continue;
+      }
+      pendingApplication.rejectBecauseOtherSelected(now);
+    }
+
+    // 모든 상태 변경과 Auditing 수정 시각을 DB에 반영
+    applicationRepository.flush();
+
+    // 승인된 신청과 공고 종료 정보를 반환
+    return new ApplicationResponseDto.ApplicationApproveResponse(
+        application.getApplicationId(),
+        application.getStatus(),
+        post.getPostId(),
+        post.getStatus(),
+        post.getClosedReason(),
+        toResponseTime(application.getUpdatedAt()),
+        toResponseTime(application.getApprovedAt()),
+        toResponseTime(post.getClosedAt()),
+        toResponseTime(application.getCompletedAt()),
+        application.getCompletionMethod()
+    );
+  }
+
+  /**
    * 신청 취소 또는 거절 후 접수 마감 여부와 남은 신청 상태에 따라 공고 상태를 갱신한다.
    * 호출자는 공고 잠금을 보유하고 변경된 신청을 flush한 상태여야 한다.
    *

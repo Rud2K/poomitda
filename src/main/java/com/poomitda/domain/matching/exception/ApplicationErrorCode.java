@@ -20,6 +20,12 @@ public enum ApplicationErrorCode implements ErrorCode {
       "현재 상태에서는 신청을 거절할 수 없습니다."
   ),
 
+  // 신청이 심사 중이 아니거나 같은 공고에 승인 또는 완료된 신청이 있는 경우
+  APPLICATION_CANNOT_BE_APPROVED(
+      HttpStatus.CONFLICT,
+      "현재 상태에서는 신청을 승인할 수 없습니다."
+  ),
+
   // 공고가 접수 중 또는 접수 마감 상태가 아닌 경우
   POST_ALREADY_CLOSED(
       HttpStatus.CONFLICT,

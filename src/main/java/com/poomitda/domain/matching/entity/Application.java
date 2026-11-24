@@ -200,4 +200,48 @@ public class Application extends BaseUpdatedTimeEntity {
     this.rejectionReason = ApplicationRejectionReason.SCREENING_REJECTED;
     this.rejectedAt = now;
   }
+
+  /**
+   * 심사 중인 신청을 승인하고 승인 시각을 기록한다.
+   *
+   * @param now UTC 기준 승인 시각
+   * @throws IllegalArgumentException 승인 시각이 null인 경우
+   * @throws BusinessException 신청이 UNDER_REVIEW 상태가 아닌 경우
+   */
+  public void approve(LocalDateTime now) {
+    if (now == null) {
+      throw new IllegalArgumentException("승인 시각은 null일 수 없습니다.");
+    }
+
+    if (this.status != ApplicationStatus.UNDER_REVIEW) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_APPROVED);
+    }
+
+    this.status = ApplicationStatus.APPROVED;
+    this.approvedAt = now;
+    this.completedAt = null;
+    this.completedBy = null;
+    this.completionMethod = null;
+  }
+
+  /**
+   * 다른 신청자가 선정되어 접수 또는 심사 중인 신청을 자동 거절한다.
+   *
+   * @param now UTC 기준 거절 시각
+   * @throws IllegalArgumentException 거절 시각이 null인 경우
+   * @throws IllegalStateException 신청이 APPLIED 또는 UNDER_REVIEW 상태가 아닌 경우
+   */
+  public void rejectBecauseOtherSelected(LocalDateTime now) {
+    if (now == null) {
+      throw new IllegalArgumentException("거절 시각은 null일 수 없습니다.");
+    }
+
+    if (this.status != ApplicationStatus.APPLIED && this.status != ApplicationStatus.UNDER_REVIEW) {
+      throw new IllegalStateException("다른 신청자 선정에 따른 자동 거절은 접수 또는 심사 중인 신청만 가능합니다.");
+    }
+
+    this.status = ApplicationStatus.REJECTED;
+    this.rejectionReason = ApplicationRejectionReason.OTHER_SELECTED;
+    this.rejectedAt = now;
+  }
 }

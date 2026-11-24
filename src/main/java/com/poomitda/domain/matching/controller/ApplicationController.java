@@ -112,4 +112,18 @@ public class ApplicationController {
         )
     );
   }
+
+  @PatchMapping("/{applicationId}/approve")
+  public SuccessResponse<ApplicationResponseDto.ApplicationApproveResponse> approveApplication(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("applicationId") Long applicationId
+  ) {
+    return SuccessResponse.of(
+        "신청이 승인되었습니다.",
+        applicationService.approveApplication(
+            memberPrincipal.memberId(),
+            applicationId
+        )
+    );
+  }
 }
