@@ -98,4 +98,18 @@ public class ApplicationController {
         )
     );
   }
+
+  @PatchMapping("/{applicationId}/reject")
+  public SuccessResponse<ApplicationResponseDto.ApplicationRejectResponse> rejectApplication(
+      @AuthenticationPrincipal MemberPrincipal memberPrincipal,
+      @PathVariable("applicationId") Long applicationId
+  ) {
+    return SuccessResponse.of(
+        "신청이 거절되었습니다.",
+        applicationService.rejectApplication(
+            memberPrincipal.memberId(),
+            applicationId
+        )
+    );
+  }
 }

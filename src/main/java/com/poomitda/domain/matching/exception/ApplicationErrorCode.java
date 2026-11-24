@@ -14,6 +14,12 @@ public enum ApplicationErrorCode implements ErrorCode {
       "현재 상태에서는 신청 심사를 시작할 수 없습니다."
   ),
 
+  // 신청이 UNDER_REVIEW 상태가 아니어서 거절할 수 없는 경우
+  APPLICATION_CANNOT_BE_REJECTED(
+      HttpStatus.CONFLICT,
+      "현재 상태에서는 신청을 거절할 수 없습니다."
+  ),
+
   // 공고가 접수 중 또는 접수 마감 상태가 아닌 경우
   POST_ALREADY_CLOSED(
       HttpStatus.CONFLICT,

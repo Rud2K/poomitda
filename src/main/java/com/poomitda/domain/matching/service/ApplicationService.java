@@ -285,7 +285,7 @@ public class ApplicationService {
     applicationRepository.flush();
 
     // 취소 후 남은 신청과 접수 마감 여부에 따라 공고 상태 갱신
-    updatePostStatusAfterCancellation(post);
+    updatePostStatusAfterCandidateRemoval(post);
 
     // 취소된 신청 정보와 한국 시각으로 변환한 수정 시각 반환
     return new ApplicationCancelResponse(
@@ -378,13 +378,101 @@ public class ApplicationService {
   }
 
   /**
-   * 신청 취소 후 접수 마감 여부와 남은 신청 상태에 따라 공고 상태를 갱신한다.
-   * 호출자는 공고 잠금을 보유하고 취소된 신청을 flush한 상태여야 한다.
+   * 공고 작성자가 심사 중인 신청을 거절하고 필요한 공고 상태 변경을 처리한다.
+   *
+   * @param memberId 현재 로그인한 보호자 회원 ID
+   * @param applicationId 거절할 신청 ID
+   * @return 거절된 신청 정보를 담은 {@link ApplicationRejectResponse}
+   * @throws BusinessException 인증, 권한, 입력값, 공고 또는 신청 상태가 유효하지 않은 경우
+   * @throws IllegalStateException 마감된 미종료 공고에 승인 또는 완료된 신청이 있는 경우
+   */
+  @Transactional
+  public ApplicationResponseDto.ApplicationRejectResponse rejectApplication(
+      Long memberId,
+      Long applicationId
+  ) {
+    // 로그인 회원 ID 누락 확인
+    if (memberId == null) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원을 잠금 조회하고 활성 상태 검증
+    Member currentMember = memberRepository.findByIdForUpdate(memberId)
+        .orElseThrow(
+            () -> new BusinessException(CommonErrorCode.UNAUTHORIZED)
+        );
+
+    if (currentMember.getStatus() != MemberStatus.ACTIVE) {
+      throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    // 현재 회원의 보호자 역할 검증
+    if (currentMember.getRole() != MemberRole.ROLE_PROTECTOR) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 신청 ID 검증
+    if (applicationId == null || applicationId <= 0) {
+      throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 신청이 속한 공고 ID 조회
+    Long postId = applicationRepository.findPostIdByApplicationId(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 삭제되지 않은 공고를 잠금 조회
+    Post post = postRepository.findByIdForUpdate(postId)
+        .orElseThrow(
+            () -> new BusinessException(PostErrorCode.POST_NOT_FOUND)
+        );
+
+    // 신청 잠금 조회
+    Application application = applicationRepository.findByIdForUpdate(applicationId)
+        .orElseThrow(
+            () -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND)
+        );
+
+    // 현재 회원이 공고 작성자인지 확인
+    if (!currentMember.getMemberId().equals(post.getAuthor().getMemberId())) {
+      throw new BusinessException(CommonErrorCode.FORBIDDEN);
+    }
+
+    // 공고가 심사 가능한 상태인지 확인
+    PostStatus postStatus = post.getStatus();
+
+    if (postStatus != PostStatus.RECRUITING && postStatus != PostStatus.RECEPTION_CLOSED) {
+      throw new BusinessException(ApplicationErrorCode.POST_ALREADY_CLOSED);
+    }
+
+    // 신청 상태를 검증하고 거절 사유와 시각 기록
+    application.reject(LocalDateTime.now(ZoneOffset.UTC));
+
+    // 신청 상태 변경과 Auditing 수정 시각을 DB에 반영
+    applicationRepository.flush();
+
+    // 남은 후보와 접수 마감 여부에 따라 공고 상태 갱신
+    updatePostStatusAfterCandidateRemoval(post);
+
+    // 거절된 신청 정보 반환
+    return new ApplicationResponseDto.ApplicationRejectResponse(
+        application.getApplicationId(),
+        application.getStatus(),
+        toResponseTime(application.getUpdatedAt()),
+        application.getRejectionReason(),
+        toResponseTime(application.getRejectedAt())
+    );
+  }
+
+  /**
+   * 신청 취소 또는 거절 후 접수 마감 여부와 남은 신청 상태에 따라 공고 상태를 갱신한다.
+   * 호출자는 공고 잠금을 보유하고 변경된 신청을 flush한 상태여야 한다.
    *
    * @param post 잠금 조회한 공고
    * @throws IllegalStateException 마감된 미종료 공고에 승인 또는 완료된 신청이 있는 경우
    */
-  private void updatePostStatusAfterCancellation(Post post) {
+  private void updatePostStatusAfterCandidateRemoval(Post post) {
     // 이미 종료된 공고의 상태와 종료 정보 유지
     if (post.getStatus() == PostStatus.CLOSED) return;
 

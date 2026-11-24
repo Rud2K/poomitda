@@ -116,14 +116,17 @@ public class SecurityConfig {
                 "/api/applications/{applicationId}"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
+            // 신청 취소는 일반 회원과 보호자만 허용
             .requestMatchers(
                 HttpMethod.PATCH,
                 "/api/applications/{applicationId}/cancel"
             ).hasAnyAuthority("ROLE_USER", "ROLE_PROTECTOR")
 
+            // 신청 심사 시작과 거절은 보호자만 허용
             .requestMatchers(
                 HttpMethod.PATCH,
-                "/api/applications/{applicationId}/review"
+                "/api/applications/{applicationId}/review",
+                "/api/applications/{applicationId}/reject"
             ).hasAnyAuthority("ROLE_PROTECTOR")
 
             // 위 규칙에 해당하지 않는 요청은 인증 필요

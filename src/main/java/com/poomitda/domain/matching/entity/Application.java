@@ -179,4 +179,25 @@ public class Application extends BaseUpdatedTimeEntity {
     }
     this.status = ApplicationStatus.UNDER_REVIEW;
   }
+
+  /**
+   * 심사 중인 신청을 거절하고 거절 사유와 시각을 기록한다.
+   *
+   * @param now UTC 기준 시각
+   * @throws IllegalArgumentException 거절 시각이 null인 경우
+   * @throws BusinessException 신청이 UNDER_REVIEW 상태가 아닌 경우
+   */
+  public void reject(LocalDateTime now) {
+    if (now == null) {
+      throw new IllegalArgumentException("거절 시각은 null일 수 없습니다.");
+    }
+
+    if (this.status != ApplicationStatus.UNDER_REVIEW) {
+      throw new BusinessException(ApplicationErrorCode.APPLICATION_CANNOT_BE_REJECTED);
+    }
+
+    this.status = ApplicationStatus.REJECTED;
+    this.rejectionReason = ApplicationRejectionReason.SCREENING_REJECTED;
+    this.rejectedAt = now;
+  }
 }
