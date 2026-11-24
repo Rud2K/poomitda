@@ -948,6 +948,371 @@ class ApplicationServiceTest {
     );
   }
 
+  @ParameterizedTest
+  @CsvSource({
+      "RECRUITING, false, NONE, RECRUITING",
+      "RECRUITING, true, NONE, CLOSED",
+      "RECEPTION_CLOSED, true, NONE, CLOSED",
+      "RECRUITING, true, APPLIED, RECEPTION_CLOSED",
+      "RECEPTION_CLOSED, true, UNDER_REVIEW, RECEPTION_CLOSED"
+  })
+  @DisplayName("심사 중인 신청 거절 -> 거절 정보 반환 및 마감과 남은 후보에 따른 공고 처리")
+  void rejectionUpdatesApplicationAndPost(
+      PostStatus initialPostStatus,
+      boolean deadlinePassed,
+      String remainingStatus,
+      PostStatus expectedPostStatus
+  ) {
+    // given
+    Member author = createReviewProtector(2L);
+    LocalDateTime deadline = deadlinePassed
+        ? LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
+        : LocalDateTime.now(ZoneOffset.UTC).plusDays(1);
+
+    Post post = createPost(author, deadline);
+    if (initialPostStatus == PostStatus.RECEPTION_CLOSED) {
+      post.closeReception();
+    }
+
+    Application application = createDetailApplication(post, createMember(MEMBER_ID));
+    application.startReview();
+
+    stubReviewLookup(author, post, application);
+
+    if (deadlinePassed) {
+      when(applicationRepository.findByPostIdAndStatusInForUpdate(
+          POST_ID,
+          List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED)
+      )).thenReturn(List.of());
+
+      List<Application> remainingApplications = new ArrayList<>();
+
+      if (!"NONE".equals(remainingStatus)) {
+        Application remaining =
+            createDetailApplication(post, createMember(3L));
+        ReflectionTestUtils.setField(
+            remaining, "applicationId", APPLICATION_ID + 1
+        );
+
+        if ("UNDER_REVIEW".equals(remainingStatus)) {
+          remaining.startReview();
+        }
+
+        remainingApplications.add(remaining);
+      }
+
+      when(applicationRepository.findByPostIdAndStatusInForUpdate(
+          POST_ID,
+          List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+      )).thenReturn(remainingApplications);
+    }
+
+    // Mock 환경에서 flush 시 Auditing 시각이 반영되는 상황을 재현
+    LocalDateTime updatedAt = LocalDateTime.now(ZoneOffset.UTC);
+    doAnswer(invocation -> {
+      ReflectionTestUtils.setField(application, "updatedAt", updatedAt);
+      return null;
+    }).when(applicationRepository).flush();
+
+    // when
+    LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+    ApplicationRejectResponse response = applicationService.rejectApplication(2L, APPLICATION_ID);
+    LocalDateTime after = LocalDateTime.now(ZoneOffset.UTC);
+
+    // then
+    assertAll(
+        () -> assertEquals(
+            ApplicationStatus.REJECTED, application.getStatus()
+        ),
+        () -> assertEquals(
+            ApplicationRejectionReason.SCREENING_REJECTED,
+            application.getRejectionReason()
+        ),
+        () -> assertNotNull(application.getRejectedAt()),
+        () -> assertEquals(APPLICATION_ID, response.applicationId()),
+        () -> assertEquals(ApplicationStatus.REJECTED, response.status()),
+        () -> assertEquals(
+            ApplicationRejectionReason.SCREENING_REJECTED,
+            response.rejectionReason()
+        ),
+        () -> assertEquals(
+            updatedAt.atOffset(ZoneOffset.UTC)
+                .withOffsetSameInstant(ZoneOffset.ofHours(9)),
+            response.updatedAt()
+        ),
+        () -> assertEquals(expectedPostStatus, post.getStatus())
+    );
+
+    assertAll(
+        () -> assertFalse(application.getRejectedAt().isBefore(before)),
+        () -> assertFalse(application.getRejectedAt().isAfter(after)),
+        () -> assertEquals(
+            application.getRejectedAt().atOffset(ZoneOffset.UTC)
+                .withOffsetSameInstant(ZoneOffset.ofHours(9)),
+            response.rejectedAt()
+        )
+    );
+
+    if (expectedPostStatus == PostStatus.CLOSED) {
+      assertEquals(PostClosedReason.NO_SELECTION, post.getClosedReason());
+      assertNotNull(post.getClosedAt());
+      assertFalse(post.getClosedAt().isBefore(before));
+      assertFalse(post.getClosedAt().isAfter(after));
+    } else {
+      assertNull(post.getClosedReason());
+      assertNull(post.getClosedAt());
+    }
+
+    verify(applicationRepository).flush();
+    verify(postRepository, never())
+        .findByIdIncludingDeletedForUpdate(anyLong());
+
+    if (deadlinePassed) {
+      verify(applicationRepository).findByPostIdAndStatusInForUpdate(
+          POST_ID,
+          List.of(ApplicationStatus.APPLIED, ApplicationStatus.UNDER_REVIEW)
+      );
+    } else {
+      verify(applicationRepository, never())
+          .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "NULL_ID", "MISSING_MEMBER", "WITHDRAWN_MEMBER"
+  })
+  @DisplayName("거절 요청자의 인증 정보가 유효하지 않음 -> UNAUTHORIZED")
+  void rejectionRejectsInvalidAuthentication(String scenario) {
+    // given
+    Long currentMemberId = "NULL_ID".equals(scenario) ? null : 2L;
+
+    if ("MISSING_MEMBER".equals(scenario)) {
+      when(memberRepository.findByIdForUpdate(2L))
+          .thenReturn(Optional.empty());
+    } else if ("WITHDRAWN_MEMBER".equals(scenario)) {
+      Member author = createReviewProtector(2L);
+      author.withdraw(CREATED_AT);
+
+      when(memberRepository.findByIdForUpdate(2L))
+          .thenReturn(Optional.of(author));
+    }
+
+    // when & then
+    assertRejectionFails(
+        currentMemberId,
+        APPLICATION_ID,
+        CommonErrorCode.UNAUTHORIZED
+    );
+    verifyNoInteractions(postRepository, applicationRepository);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = MemberRole.class,
+      names = {"ROLE_USER", "ROLE_ADMIN"}
+  )
+  @DisplayName("거절 요청자의 현재 역할이 보호자가 아님 -> FORBIDDEN")
+  void rejectionRejectsNonProtector(MemberRole role) {
+    // given
+    Member currentMember = createMember(2L);
+    ReflectionTestUtils.setField(currentMember, "role", role);
+
+    when(memberRepository.findByIdForUpdate(2L))
+        .thenReturn(Optional.of(currentMember));
+
+    // when & then
+    assertRejectionFails(
+        2L, APPLICATION_ID, CommonErrorCode.FORBIDDEN
+    );
+    verifyNoInteractions(postRepository, applicationRepository);
+  }
+
+  @Test
+  @DisplayName("다른 보호자가 신청 거절 요청 -> FORBIDDEN 및 신청 유지")
+  void rejectionRejectsNonAuthor() {
+    // given
+    Member author = createReviewProtector(2L);
+    Member otherProtector = createReviewProtector(3L);
+    Post post = createPost(author, null);
+    Application application = createDetailApplication(post, createMember(MEMBER_ID));
+    application.startReview();
+
+    stubReviewLookup(otherProtector, post, application);
+
+    // when & then
+    assertRejectionFails(
+        3L, APPLICATION_ID, CommonErrorCode.FORBIDDEN
+    );
+
+    assertAll(
+        () -> assertEquals(
+            ApplicationStatus.UNDER_REVIEW, application.getStatus()
+        ),
+        () -> assertNull(application.getRejectionReason()),
+        () -> assertNull(application.getRejectedAt())
+    );
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(longs = {0L, -1L})
+  @DisplayName("거절할 신청 ID가 null 또는 양수가 아님 -> INVALID_INPUT_VALUE")
+  void rejectionRejectsInvalidApplicationId(Long applicationId) {
+    // given
+    Member author = createReviewProtector(2L);
+    when(memberRepository.findByIdForUpdate(2L))
+        .thenReturn(Optional.of(author));
+
+    // when & then
+    assertRejectionFails(
+        2L, applicationId, CommonErrorCode.INVALID_INPUT_VALUE
+    );
+    verifyNoInteractions(postRepository, applicationRepository);
+  }
+
+  @Test
+  @DisplayName("거절할 신청이 존재하지 않음 -> APPLICATION_NOT_FOUND")
+  void rejectionRejectsMissingApplication() {
+    // given
+    Member author = createReviewProtector(2L);
+    when(memberRepository.findByIdForUpdate(2L))
+        .thenReturn(Optional.of(author));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.empty());
+
+    // when & then
+    assertRejectionFails(
+        2L,
+        APPLICATION_ID,
+        ApplicationErrorCode.APPLICATION_NOT_FOUND
+    );
+    verifyNoInteractions(postRepository);
+    verify(applicationRepository, never()).findByIdForUpdate(anyLong());
+  }
+
+  @Test
+  @DisplayName("거절 대상의 삭제 제외 공고 조회 결과가 없음 -> POST_NOT_FOUND")
+  void rejectionRejectsUnavailablePost() {
+    // given
+    Member author = createReviewProtector(2L);
+    when(memberRepository.findByIdForUpdate(2L))
+        .thenReturn(Optional.of(author));
+    when(applicationRepository.findPostIdByApplicationId(APPLICATION_ID))
+        .thenReturn(Optional.of(POST_ID));
+    when(postRepository.findByIdForUpdate(POST_ID))
+        .thenReturn(Optional.empty());
+
+    // when & then
+    assertRejectionFails(
+        2L, APPLICATION_ID, PostErrorCode.POST_NOT_FOUND
+    );
+
+    verify(postRepository).findByIdForUpdate(POST_ID);
+    verify(postRepository, never())
+        .findByIdIncludingDeletedForUpdate(anyLong());
+    verify(applicationRepository, never()).findByIdForUpdate(anyLong());
+  }
+
+  @Test
+  @DisplayName("종료된 공고의 신청 거절 요청 -> POST_ALREADY_CLOSED 및 상태 유지")
+  void rejectionRejectsClosedPost() {
+    // given
+    Member author = createReviewProtector(2L);
+    Post post = createPost(author, CREATED_AT);
+    LocalDateTime closedAt = CREATED_AT.plusDays(1);
+    post.closeAfterDeadline(PostClosedReason.NO_SELECTION, closedAt);
+
+    Application application = createDetailApplication(post, createMember(MEMBER_ID));
+    application.startReview();
+
+    stubReviewLookup(author, post, application);
+
+    // when & then
+    assertRejectionFails(
+        2L, APPLICATION_ID, ApplicationErrorCode.POST_ALREADY_CLOSED
+    );
+
+    assertAll(
+        () -> assertEquals(
+            ApplicationStatus.UNDER_REVIEW, application.getStatus()
+        ),
+        () -> assertNull(application.getRejectionReason()),
+        () -> assertNull(application.getRejectedAt()),
+        () -> assertEquals(PostStatus.CLOSED, post.getStatus()),
+        () -> assertEquals(
+            PostClosedReason.NO_SELECTION, post.getClosedReason()
+        ),
+        () -> assertEquals(closedAt, post.getClosedAt())
+    );
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationStatus.class,
+      names = "UNDER_REVIEW",
+      mode = EnumSource.Mode.EXCLUDE
+  )
+  @DisplayName("심사 중이 아닌 신청의 거절 요청 -> 거절 불가 오류 및 기존 정보 유지")
+  void rejectionRejectsNonReviewStatus(ApplicationStatus status) {
+    // given
+    Member author = createReviewProtector(2L);
+    Post post = createPost(author, null);
+    Application application = createDetailApplication(post, createMember(MEMBER_ID));
+
+    if (status == ApplicationStatus.CANCELLED) {
+      application.cancel();
+    } else if (status == ApplicationStatus.REJECTED) {
+      application.startReview();
+      application.reject(CREATED_AT.plusDays(1));
+    } else if (status != ApplicationStatus.APPLIED) {
+      ReflectionTestUtils.setField(application, "status", status);
+    }
+
+    ApplicationRejectionReason originalReason = application.getRejectionReason();
+    LocalDateTime originalRejectedAt = application.getRejectedAt();
+    LocalDateTime originalUpdatedAt = application.getUpdatedAt();
+
+    stubReviewLookup(author, post, application);
+
+    // when & then
+    assertRejectionFails(
+        2L,
+        APPLICATION_ID,
+        ApplicationErrorCode.APPLICATION_CANNOT_BE_REJECTED
+    );
+
+    assertAll(
+        () -> assertEquals(status, application.getStatus()),
+        () -> assertEquals(
+            originalReason, application.getRejectionReason()
+        ),
+        () -> assertEquals(
+            originalRejectedAt, application.getRejectedAt()
+        ),
+        () -> assertEquals(
+            originalUpdatedAt, application.getUpdatedAt()
+        ),
+        () -> assertEquals(PostStatus.RECRUITING, post.getStatus())
+    );
+  }
+
+  private void assertRejectionFails(
+      Long memberId,
+      Long applicationId,
+      ErrorCode expectedErrorCode
+  ) {
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> applicationService.rejectApplication(memberId, applicationId)
+    );
+
+    assertEquals(expectedErrorCode, exception.getErrorCode());
+    verify(applicationRepository, never()).flush();
+    verify(applicationRepository, never())
+        .findByPostIdAndStatusInForUpdate(anyLong(), anyCollection());
+  }
+
   private Member createReviewProtector(Long memberId) {
     Member member = createMember(memberId);
     ReflectionTestUtils.setField(member, "role", MemberRole.ROLE_PROTECTOR);
