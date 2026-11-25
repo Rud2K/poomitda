@@ -35,7 +35,36 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
    * @param statuses 조회할 신청 상태 목록, 비어 있지 않아야 한다.
    * @return 지정한 상태의 신청이 있으면 true, 없으면 false
    */
-  boolean existsByPost_PostIdAndStatusIn(Long postId, Collection<ApplicationStatus> statuses);
+  boolean existsByPost_PostIdAndStatusIn(
+      Long postId,
+      Collection<ApplicationStatus> statuses
+  );
+
+  /**
+   * 회원이 제출한 신청 중 지정한 상태의 신청이 있는지 확인한다.
+   * 연결된 공고의 상태와 삭제 여부에 관계없이 조회한다.
+   *
+   * @param memberId 신청자의 회원 ID
+   * @param statuses 조회할 신청 상태 목록, 비어있지 않아야 한다.
+   * @return 조건에 맞는 신청이 있으면 true, 없으면 false
+   */
+  boolean existsByApplicant_MemberIdAndStatusIn(
+      Long memberId,
+      Collection<ApplicationStatus> statuses
+  );
+
+  /**
+   * 회원이 작성한 공고에 지정한 상태의 신청이 있는지 확인한다.
+   * 공고의 상태와 삭제 여부에 관계없이 조회한다.
+   *
+   * @param memberId 공고 작성자의 회원 ID
+   * @param statuses 조회할 신청 상태 목록, 비어 있지 않아야 한다.
+   * @return 조건에 맞는 신청이 있으면 true, 없으면 false
+   */
+  boolean existsByPost_Author_MemberIdAndStatusIn(
+      Long memberId,
+      Collection<ApplicationStatus> statuses
+  );
 
   /**
    * 신청을 신청자, 공고 및 공고 작성자 정보와 함께 조회한다.

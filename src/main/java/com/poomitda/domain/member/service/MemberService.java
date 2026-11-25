@@ -1,6 +1,8 @@
 package com.poomitda.domain.member.service;
 
 import com.poomitda.domain.auth.repository.RefreshTokenRepository;
+import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
+import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.member.dto.*;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.MemberStatus;
@@ -26,6 +28,7 @@ public class MemberService {
   private final PasswordEncoder passwordEncoder;
   private final PostRepository postRepository;
   private final RefreshTokenRepository refreshTokenRepository;
+  private final ApplicationRepository applicationRepository;
 
   /**
    * 회원가입 정보를 바탕으로 회원을 생성하고 저장한다.
@@ -229,10 +232,10 @@ public class MemberService {
   }
 
   /**
-   * 진행 중인 공고가 없는 회원을 탈퇴 처리하고 Refresh Token을 삭제한다.
+   * 진행 중인 모집, 신청, 심사 및 인계 업무가 없는 회원을 탈퇴 처리하고 Refresh Token을 삭제한다.
    *
    * @param memberId 탈퇴할 회원의 ID
-   * @throws BusinessException 회원이 없거나 활동 상태가 아니거나 진행 중인 공고가 있는 경우
+   * @throws BusinessException 회원이 없거나 활동 상태가 아니거나 진행 중인 업무가 있는 경우
    */
   @Transactional
   public void withdraw(Long memberId) {
@@ -258,9 +261,34 @@ public class MemberService {
       throw new BusinessException(MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS);
     }
 
-    // TODO: (신청 기능 구현 후) 신청자로서 APPLIED, UNDER_REVIEW, APPROVED 상태의 신청 존재 여부 검사
-    // TODO: (인계 기능 구현 후) 회원과 관련된 미완료 인계 존재 여부를 검사
-    // TODO: 신청 및 인계 검사에 삭제된 공고의 진행 업무도 포함하고, 관련 업무 생성 시 동일 회원 잠금 규칙 적용
+    // 신청과 인계가 진행 중인 상태 목록 준비
+    List<ApplicationStatus> activeApplicationStatuses = List.of(
+        ApplicationStatus.APPLIED,
+        ApplicationStatus.UNDER_REVIEW,
+        ApplicationStatus.APPROVED
+    );
+
+    // 신청자로서 진행 중인 신청이 있는지 확인
+    boolean hasActiveApplications = applicationRepository.existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses
+    );
+
+    // 진행 중인 신청이 있으면 탈퇴 제한
+    if (hasActiveApplications) {
+      throw new BusinessException(MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS);
+    }
+
+    // 공고 작성자로서 진행 중인 심사 또는 인계 업무가 있는지 확인
+    boolean hasActivePostApplications = applicationRepository.existsByPost_Author_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses
+    );
+
+    // 진행 중인 심사 또는 인계 업무가 있으면 탈퇴 제한
+    if (hasActivePostApplications) {
+      throw new BusinessException(MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS);
+    }
 
     // UTC 기준 현재 시각으로 회원의 삭제 시각과 탈퇴 상태를 반영
     member.withdraw(LocalDateTime.now(ZoneOffset.UTC));
