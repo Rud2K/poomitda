@@ -5,6 +5,8 @@ import static org.mockito.Mockito.*;
 
 import com.poomitda.domain.auth.entity.RefreshToken;
 import com.poomitda.domain.auth.repository.RefreshTokenRepository;
+import com.poomitda.domain.matching.entity.constant.ApplicationStatus;
+import com.poomitda.domain.matching.repository.ApplicationRepository;
 import com.poomitda.domain.member.dto.*;
 import com.poomitda.domain.member.entity.Member;
 import com.poomitda.domain.member.entity.constant.*;
@@ -42,6 +44,9 @@ class MemberServiceTest {
 
   @Mock
   private RefreshTokenRepository refreshTokenRepository;
+
+  @Mock
+  private ApplicationRepository applicationRepository;
 
   @InjectMocks
   private MemberService memberService;
@@ -1044,18 +1049,11 @@ class MemberServiceTest {
   }
 
   @Test
-  @DisplayName("진행 공고 없음 및 토큰 존재 -> 회원 탈퇴와 토큰 삭제")
+  @DisplayName("모든 진행 업무 없음 및 토큰 존재 -> 회원 탈퇴와 토큰 삭제")
   void withdrawWithRefreshTokenTest() {
     // given
     Long memberId = 1L;
-
-    Member member = new Member(
-        "member@example.com",
-        "encoded-password",
-        "품잇다",
-        null,
-        null
-    );
+    Member member = createWithdrawalMember();
 
     RefreshToken refreshToken = new RefreshToken(
         member,
@@ -1063,18 +1061,9 @@ class MemberServiceTest {
         LocalDateTime.now(ZoneOffset.UTC).plusDays(1)
     );
 
-    List<PostStatus> activeStatuses = List.of(
-        PostStatus.RECRUITING,
-        PostStatus.RECEPTION_CLOSED
-    );
-
     when(memberRepository.findByIdForUpdate(memberId))
         .thenReturn(Optional.of(member));
-
-    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
-        memberId,
-        activeStatuses
-    )).thenReturn(false);
+    stubNoActiveWithdrawalProcesses(memberId);
 
     when(refreshTokenRepository.findByMember_MemberId(memberId))
         .thenReturn(Optional.of(refreshToken));
@@ -1091,40 +1080,21 @@ class MemberServiceTest {
     assertFalse(member.getDeletedAt().isAfter(after));
 
     verify(memberRepository).findByIdForUpdate(memberId);
-    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
-        memberId,
-        activeStatuses
-    );
+    verifyWithdrawalProcessChecks(memberId);
     verify(refreshTokenRepository).findByMember_MemberId(memberId);
     verify(refreshTokenRepository).delete(refreshToken);
   }
 
   @Test
-  @DisplayName("진행 공고 및 토큰 없음 -> 회원 탈퇴 완료")
+  @DisplayName("모든 진행 업무 및 토큰 없음 -> 회원 탈퇴 완료")
   void withdrawWithoutRefreshTokenTest() {
     // given
     Long memberId = 1L;
-
-    Member member = new Member(
-        "member@example.com",
-        "encoded-password",
-        "품잇다",
-        null,
-        null
-    );
-
-    List<PostStatus> activeStatuses = List.of(
-        PostStatus.RECRUITING,
-        PostStatus.RECEPTION_CLOSED
-    );
+    Member member = createWithdrawalMember();
 
     when(memberRepository.findByIdForUpdate(memberId))
         .thenReturn(Optional.of(member));
-
-    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
-        memberId,
-        activeStatuses
-    )).thenReturn(false);
+    stubNoActiveWithdrawalProcesses(memberId);
 
     when(refreshTokenRepository.findByMember_MemberId(memberId))
         .thenReturn(Optional.empty());
@@ -1141,11 +1111,153 @@ class MemberServiceTest {
     assertFalse(member.getDeletedAt().isAfter(after));
 
     verify(memberRepository).findByIdForUpdate(memberId);
-    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
-        memberId,
-        activeStatuses
-    );
+    verifyWithdrawalProcessChecks(memberId);
     verify(refreshTokenRepository).findByMember_MemberId(memberId);
     verify(refreshTokenRepository, never()).delete(any(RefreshToken.class));
+  }
+
+  @Test
+  @DisplayName("신청자로서 진행 신청 존재 -> 탈퇴 제한 및 회원과 토큰 유지")
+  void withdrawWithActiveApplicationsTest() {
+    // given
+    Long memberId = 1L;
+    Member member = createWithdrawalMember();
+
+    when(memberRepository.findByIdForUpdate(memberId))
+        .thenReturn(Optional.of(member));
+
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        List.of(PostStatus.RECRUITING, PostStatus.RECEPTION_CLOSED)
+    )).thenReturn(false);
+
+    when(applicationRepository.existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    )).thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.withdraw(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS,
+        exception.getErrorCode()
+    );
+    assertEquals(MemberStatus.ACTIVE, member.getStatus());
+    assertNull(member.getDeletedAt());
+
+    verify(applicationRepository).existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    );
+    verify(applicationRepository, never())
+        .existsByPost_Author_MemberIdAndStatusIn(anyLong(), anyCollection());
+    verifyNoInteractions(refreshTokenRepository);
+  }
+
+  @Test
+  @DisplayName("작성 공고의 진행 신청 존재 -> 탈퇴 제한 및 회원과 토큰 유지")
+  void withdrawWithActivePostApplicationsTest() {
+    // given
+    Long memberId = 1L;
+    Member member = createWithdrawalMember();
+
+    when(memberRepository.findByIdForUpdate(memberId))
+        .thenReturn(Optional.of(member));
+
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        List.of(PostStatus.RECRUITING, PostStatus.RECEPTION_CLOSED)
+    )).thenReturn(false);
+
+    when(applicationRepository.existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    )).thenReturn(false);
+
+    when(applicationRepository.existsByPost_Author_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    )).thenReturn(true);
+
+    // when
+    BusinessException exception = assertThrows(
+        BusinessException.class,
+        () -> memberService.withdraw(memberId)
+    );
+
+    // then
+    assertEquals(
+        MemberErrorCode.CANNOT_WITHDRAW_ACTIVE_PROCESS,
+        exception.getErrorCode()
+    );
+    assertEquals(MemberStatus.ACTIVE, member.getStatus());
+    assertNull(member.getDeletedAt());
+
+    verify(applicationRepository).existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    );
+    verify(applicationRepository).existsByPost_Author_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    );
+    verifyNoInteractions(refreshTokenRepository);
+  }
+
+  private Member createWithdrawalMember() {
+    return new Member(
+        "member@example.com",
+        "encoded-password",
+        "품잇다",
+        null,
+        null
+    );
+  }
+
+  private List<ApplicationStatus> activeApplicationStatuses() {
+    return List.of(
+        ApplicationStatus.APPLIED,
+        ApplicationStatus.UNDER_REVIEW,
+        ApplicationStatus.APPROVED
+    );
+  }
+
+  private void stubNoActiveWithdrawalProcesses(Long memberId) {
+    when(postRepository.existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        List.of(PostStatus.RECRUITING, PostStatus.RECEPTION_CLOSED)
+    )).thenReturn(false);
+
+    when(applicationRepository.existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    )).thenReturn(false);
+
+    when(applicationRepository.existsByPost_Author_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    )).thenReturn(false);
+  }
+
+  private void verifyWithdrawalProcessChecks(Long memberId) {
+    verify(postRepository).existsByAuthor_MemberIdAndStatusIn(
+        memberId,
+        List.of(PostStatus.RECRUITING, PostStatus.RECEPTION_CLOSED)
+    );
+
+    verify(applicationRepository).existsByApplicant_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    );
+
+    verify(applicationRepository).existsByPost_Author_MemberIdAndStatusIn(
+        memberId,
+        activeApplicationStatuses()
+    );
   }
 }
